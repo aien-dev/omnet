@@ -10,6 +10,22 @@ r = stclose
 ret testresult code
 end
 fn testcapacity b edit uchar 65536 mode uchar to int
+note Capacity is charged as checked quantities. These two modes pin the guard
+note against a wrapped running charge; the states they set are test-image only.
+if eq mode uchar 89
+put stctx 6 long -8
+if ne stwrite b 16 1
+ret testfinish 4
+end
+ret testfinish 0
+end
+if eq mode uchar 66
+put stctx 7 long -1
+if ne stwrite b 1 1
+ret testfinish 4
+end
+ret testfinish 0
+end
 if eq mode uchar 85
 if ne stwrite b 65537 1
 ret testfinish 4
@@ -132,6 +148,9 @@ if or eq mode uchar 71 eq mode uchar 67
 ret testcapacity b mode
 end
 if or eq mode uchar 81 eq mode uchar 85
+ret testcapacity b mode
+end
+if or eq mode uchar 89 eq mode uchar 66
 ret testcapacity b mode
 end
 if ne mode uchar 69

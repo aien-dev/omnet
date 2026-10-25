@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 UNIT = ROOT / "om/store"
 COMPILER = subprocess.check_output([str(ROOT / "tools/omc.sh")], text=True).strip()
 BASE = (ROOT / "om/blake2s/blake2s.om").read_text()
+QUANT = (ROOT / "om/quantity/quantity.om").read_text()
 HELP = (UNIT / "store.om").read_text()
 POOL = (UNIT / "storepool.om").read_text()
 DRIVER = (UNIT / "test/driver.om").read_text()
@@ -21,7 +22,7 @@ COUNT = 0
 
 
 def compile_binary(folder, name, helpers=HELP, pool=POOL, driver=DRIVER, prefix=""):
-    source = BASE + "\n" + prefix + "\n" + helpers + "\n" + pool + "\n" + driver
+    source = QUANT + "\n" + BASE + "\n" + prefix + "\n" + helpers + "\n" + pool + "\n" + driver
     result = subprocess.run([COMPILER], input=source.encode(), capture_output=True)
     if result.returncode:
         (folder / (name + ".om")).write_text(source)
@@ -270,6 +271,8 @@ ret renames p ulong 0 ulong 26 int 0""")
     call(binary, p, "U")  # too-large chunk is a declared error, not an array trap
     call(binary, p, "Q")  # exactly 65536 frames, then refuse one more
     call(binary, p, "C")  # exactly 32 MiB payload, then refuse one more byte
+    call(binary, p, "Y")  # a negative running byte charge is a declared refusal, not a trap
+    call(binary, p, "B")  # a negative running frame count is a declared refusal, not a trap
     assert (p / "snapshot").read_bytes() == original
     capacity = directory(root, "capacity")
     call(binary, capacity, "E")
@@ -367,6 +370,7 @@ ret renames p ulong 0 ulong 26 int 0""")
     save(p / "snapshot", forged)
     call(binary, p, "L", 1)
     call(mutant, p, "L", 3)
+    save(p / "snapshot", original)
     print(f"PASS store: {COUNT} completed native cases; independent BLAKE2s framing; checksum mutant detected")
     if os.geteuid() != 0:
         print("SKIP store foreign-UID chown fixtures: runner is non-root")
