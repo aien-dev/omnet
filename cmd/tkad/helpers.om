@@ -235,28 +235,29 @@ end
 end
 ret 200
 end
+note Validated public state supplies p and all candidate shapes; h contents are secret.
+note Read every hash byte; disclose only equality, never the first mismatch position.
 fn dseqhash s view uchar 65536 p ulong h view uchar 32 to ulong
+d = uchar 0
 for k ulong 32
-if ne get h k get s add p k
-ret 0
+d = or d xor get h k get s add p k
 end
-end
-ret 1
+ret shr sub ulong d 1 63
 end
 fn dssecretmatch s view uchar 65536 sn ulong h view uchar 32 to ulong
 t = new ulong 131074 0
 z = cbrdec s sn t
 r = cbrmfind t 0 2
 j = add r 1
+note Candidate count, lengths and offsets are public; do not stop after a secret match.
+m = ulong 0
 for i ulong cbrval t r
 if eq cbrval t j 32
-if ne dseqhash s cbrpoff t j h 0
-ret 1
-end
+m = or m dseqhash s cbrpoff t j h
 end
 j = cbrnext t j
 end
-ret 0
+ret m
 end
 fn dsvalidsecretat b view uchar 65536 n ulong idx ulong to ulong
 if gt n 1024

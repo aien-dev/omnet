@@ -1,0 +1,142 @@
+note SC1-Q API and status contract frozen in README.md. Raw structs are trusted not sealed.
+struct qty val ulong cap ulong end
+struct qobj ident ulong ver ulong extent ulong end
+struct qslic ident ulong ver ulong off ulong count ulong end
+
+fn qword out edit qty raw ulong cap ulong to int
+if gt raw cap
+ret int 3
+end
+put out val raw
+put out cap cap
+ret int 0
+end
+
+fn qsigned out edit qty raw long cap ulong to int
+if lt raw long 0
+ret int 2
+end
+ret qword out ulong raw cap
+end
+
+fn qvalid a view qty to int
+if gt get a val get a cap
+ret int 1
+end
+ret int 0
+end
+
+fn qpair a view qty b view qty to int
+if ne qvalid a int 0
+ret int 1
+end
+if ne qvalid b int 0
+ret int 1
+end
+if ne get a cap get b cap
+ret int 2
+end
+ret int 0
+end
+
+fn qadd out edit qty a view qty b view qty to int
+rc = qpair a b
+if ne rc int 0
+ret rc
+end
+note Q1_ADD_GUARD mutation removes this check only.
+if gt get b val sub get a cap get a val
+ret int 3
+end
+put out val add get a val get b val
+put out cap get a cap
+ret int 0
+end
+
+fn qsub out edit qty a view qty b view qty to int
+rc = qpair a b
+if ne rc int 0
+ret rc
+end
+if gt get b val get a val
+ret int 3
+end
+put out val sub get a val get b val
+put out cap get a cap
+ret int 0
+end
+
+fn qmul out edit qty a view qty b view qty to int
+rc = qpair a b
+if ne rc int 0
+ret rc
+end
+note Q4_MUL_GUARD mutation removes this check only.
+if ne get a val ulong 0
+if gt get b val div get a cap get a val
+ret int 3
+end
+end
+put out val mul get a val get b val
+put out cap get a cap
+ret int 0
+end
+
+fn qnarrow out edit qty a view qty cap ulong to int
+rc = qvalid a
+if ne rc int 0
+ret rc
+end
+if gt cap get a cap
+ret int 2
+end
+if gt get a val cap
+ret int 3
+end
+put out val get a val
+put out cap cap
+ret int 0
+end
+
+fn qnext out edit qty a view qty to int
+rc = qvalid a
+if ne rc int 0
+ret rc
+end
+if eq get a val get a cap
+ret int 3
+end
+put out val add get a val ulong 1
+put out cap get a cap
+ret int 0
+end
+
+fn qtyslice out edit qslic off view qty count view qty expect view qobj current view qobj to int
+if ne get expect ident get current ident
+ret int 4
+end
+if ne get expect ver get current ver
+ret int 4
+end
+if ne get expect extent get current extent
+ret int 4
+end
+rc = qpair off count
+if ne rc int 0
+ret rc
+end
+if ne get off cap get current extent
+ret int 2
+end
+if gt get off val get current extent
+ret int 3
+end
+if gt get count val sub get current extent get off val
+ret int 3
+end
+put out ident get current ident
+put out ver get current ver
+put out off get off val
+put out count get count val
+ret int 0
+end

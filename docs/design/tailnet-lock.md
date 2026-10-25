@@ -164,6 +164,7 @@ that way. That is a client issue outside this project; tkad's error bodies are s
 | JSON (`om/json`) and eight RPC handlers (`cmd/tkad`) | Omega | implemented: bounded parsing, trusted adapter identity binding |
 | Snapshot storage (`om/store`) | Omega | implemented: descriptor validation, writer exclusion, atomic publication, recovery |
 | tkad service (`cmd/tkad`) | Omega | implemented: private Unix socket, registry/map commands, controlled self-exec |
+| Checked quantities (`om/quantity`) | Omega | socket original-length/cursor and snapshot Revision consumers; remaining producer inventory explicit |
 | headscale glue | Go (fork) | planned |
 
 ## Verification plan
@@ -230,3 +231,18 @@ stock-client compatibility beyond the tested profile, or production deployment s
 5. headscale glue and end-to-end tests with stock clients.
 6. Review by a second implementer before any production use. Until then this is pre-alpha and does
    not protect a tailnet.
+
+### SC1 qualification integration
+
+The checked-quantity unit and real transport/revision consumers preserve unsigned
+crypto wrapping and all upstream AUM policy. Successful retained-AUM syncs are true
+service no-ops: no Revision increment or snapshot rewrite. Secret hash/list source
+comparisons no longer exit on the first mismatch/matching index; whole-machine and
+whole-service secrecy remain separate unqualified obligations.
+
+All new test selection, source mutation, compilation-result checking, fork/wait
+coordination and acceptance decisions live in the existing security3 Omega
+coordinator. `om/quantity/test/run.sh` is compatibility bootstrap glue for the
+existing suite discovery: obtain the pinned compiler, compile the coordinator,
+exec it. It contains no test policy or security logic. No new C or Python runner
+is introduced. The existing external Go/Python oracles remain unchanged.

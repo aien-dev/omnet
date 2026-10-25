@@ -1,0 +1,33 @@
+{
+  "records": [
+    {
+      "name": "dssecretmatch",
+      "source_sha256": "c07c240fc3002e76d6eef7f91c214f253d6849a83e8a478d5348561e345ed54a",
+      "raw_sha256": "227b0bacdf1236b653b084ccf83b6a086921a1ee486a24011dc4c5ffa80d8c38",
+      "raw_bytes": 14300,
+      "compile_exit": 0,
+      "scanner_args": [
+        "pub:0:0:65536"
+      ],
+      "scanner_exit": 2,
+      "stdout_sha256": "d6b73bf8664b9348ad07cb75dab0f3529b514dabfea6e33a7f519b47d92ad1d6",
+      "whole_raw_occurrences_in_daemon": 0
+    },
+    {
+      "name": "ssfirstlist",
+      "source_sha256": "d504ae21fa61628417cf4084f87df4735dea061e7c8c4425b711367dc1b59875",
+      "raw_sha256": "fe49f2c85338575273af040045e7ff0f9d98dd76765295ec656b7ae73043788c",
+      "raw_bytes": 14276,
+      "compile_exit": 0,
+      "scanner_args": [
+        "pub:0:0:65536"
+      ],
+      "scanner_exit": 2,
+      "stdout_sha256": "4e8b98447b098b1f0d1cd64edec35078eb3bd3239ccce40be8b07b3692f655d4",
+      "whole_raw_occurrences_in_daemon": 0
+    }
+  ],
+  "scanner_source_sha256": "6b14fd9bb6f174de4a87e14b5ae38c9984de48c91a0b18c468bb1197adb2c82c",
+  "scanner_binary_sha256": "aa60061ea85184d98f8fed41ad5b0ab2335d3697aba00a1eca80ba33b910e633",
+  "limits": "NOT_RUN is not proof of leakage nor secrecy. Pointer/public scratch provenance may be lost conservatively. No program-mode correspondence or closed-path qualification."
+}

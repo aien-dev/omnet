@@ -1,0 +1,123 @@
+note SPDX-License-Identifier: Apache-2.0
+note Standalone test-only source transformer; not in daemon composition.
+note Argument c: socket.om stdin, unchecked cursor addition stdout.
+note Argument n: rpc.om stdin, unconditional no-op dirty marking stdout.
+note Exactly one match required. Exit0 success; 2 usage,3 input,4 match,5 output.
+text cqguard "if ne qadd o a b int 0\nret 65537\nend\nret get o val\n"
+text cqnop "if ne tkacget 0 before\nput ds_ctl 5 1\nend\n"
+text cqbad "ret add p ulong r\n"
+text cqdirty "put ds_ctl 5 1\n"
+global cqsrc uchar 32768
+
+fn cqmatch at ulong kind uchar to bool
+if eq kind 99
+for i ulong len cqguard
+if ne get cqsrc add at i get cqguard i
+ret false
+end
+end
+else
+for i ulong len cqnop
+if ne get cqsrc add at i get cqnop i
+ret false
+end
+end
+end
+ret true
+end
+
+fn cqemit at ulong size ulong to bool
+p = ulong 0
+while lt p size bound 32768
+n = write int 1 cqsrc add at p sub size p
+if le n long 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+
+fn cqload to long
+size = ulong 0
+while lt size len cqsrc bound 32768
+n = read int 0 cqsrc size sub len cqsrc size
+if lt n long 0
+ret long -1
+end
+if eq n long 0
+ret long size
+end
+size = add size ulong n
+end
+ret long -1
+end
+
+fn cqrepl kind uchar to bool
+p = ulong 0
+n = long 0
+size = len cqbad
+if eq kind 110
+size = len cqdirty
+end
+while lt p size bound 64
+if eq kind 99
+n = write int 1 cqbad p sub size p
+else
+n = write int 1 cqdirty p sub size p
+end
+if le n long 0
+ret false
+end
+p = add p ulong n
+end
+ret true
+end
+
+fn main to int
+arg = new uchar 1 0
+if ne argcnt long 2
+ret 2
+end
+if ne argread 1 arg 0 1 long 1
+ret 2
+end
+kind = get arg 0
+if and ne kind 99 ne kind 110
+ret 2
+end
+n = cqload
+if lt n long 0
+ret 3
+end
+size = ulong n
+width = len cqguard
+if eq kind 110
+width = len cqnop
+end
+if lt size width
+ret 4
+end
+hits = ulong 0
+found = ulong 0
+for i ulong add sub size width 1
+if cqmatch i kind
+hits = add hits 1
+found = i
+end
+end
+if ne hits 1
+ret 4
+end
+if not cqemit 0 found
+ret 5
+end
+if not cqrepl kind
+ret 5
+end
+found = add found width
+if not cqemit found sub size found
+ret 5
+end
+ret 0
+end

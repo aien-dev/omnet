@@ -1,0 +1,185 @@
+note SPDX-License-Identifier: Apache-2.0
+note Compose every production source from tools/build-tkad.sh except cmd/tkad/main.om,
+note then controls.om, this file and main.om. No copied positive comparator or parser.
+note Mode0 actual helpers; mode1 byte early-return control; mode2 candidate early-return
+note control; mode3 constant-valid functional control. Modes and all state bytes are public.
+note Mode0/1/2 must complete0; mode3 must complete12, not trap or fail compilation.
+note The first two controls deliberately pass functional tests; observation needs the scanner.
+note The tested secret is the derived32byte hash, not Argon2 or the RPC secret closure.
+fn ssbyte mode ulong s view uchar 65536 p ulong h view uchar 32 to ulong
+if eq mode 1
+ret ssfirstbyte s p h
+end
+if eq mode 3
+ret 1
+end
+ret dseqhash s p h
+end
+fn ssmatch mode ulong s view uchar 65536 sn ulong h view uchar 32 to ulong
+if eq mode 2
+ret ssfirstlist s sn h
+end
+if eq mode 3
+ret 1
+end
+ret dssecretmatch s sn h
+end
+fn ssfill h edit uchar 32 i ulong to void
+for k ulong 32
+put h k uchar add mul i 7 rem k 7
+end
+end
+note Public State with1..32 unique32byte disablement values and a valid single Key.
+note wide1 uses accepted non-shortest CBOR list/byte-string lengths before typed decoding.
+fn ssstate s edit uchar 65536 count ulong wide ulong to ulong
+p = cbrhead s 0 5 4
+p = cbrhead s p 0 2
+if eq wide 0
+p = cbrhead s p 4 count
+else
+put s p 153
+put s add p 1 0
+put s add p 2 uchar count
+p = add p 3
+end
+for i ulong count
+if eq wide 0
+p = cbrhead s p 2 32
+else
+put s p 89
+put s add p 1 0
+put s add p 2 32
+p = add p 3
+end
+for k ulong 32
+put s add p k uchar add mul i 7 rem k 7
+end
+p = add p 32
+end
+p = cbrhead s p 0 3
+p = cbrhead s p 4 1
+p = cbrhead s p 5 3
+p = cbrhead s p 0 1
+p = cbrhead s p 0 1
+p = cbrhead s p 0 2
+p = cbrhead s p 0 1
+p = cbrhead s p 0 3
+p = cbrhead s p 2 32
+for k ulong 32
+put s add p k 77
+end
+p = add p 32
+p = cbrhead s p 0 4
+p = cbrhead s p 0 0
+p = cbrhead s p 0 5
+ret cbrhead s p 0 0
+end
+note Both the input and typed-normalized State must parse and pass actual state validation.
+fn ssparsed raw view uchar 65536 n ulong s edit uchar 65536 to ulong
+t = new ulong 131074 0
+if ne cbrdec raw n t 0
+ret 65537
+end
+if ne tkasvalid raw t 0 0
+ret 65537
+end
+z = tkamodel raw n 3 s 0
+if gt z 65536
+ret 65537
+end
+if ne cbrdec s z t 0
+ret 65537
+end
+if ne tkasvalid s t 0 0
+ret 65537
+end
+ret z
+end
+note All256 replacement values at every byte, including exact equality and high bits.
+note Three public offsets include the final valid32byte slice of the65536byte source.
+fn ssbytes mode ulong to int
+s = new uchar 65536 0
+h = new uchar 32 0
+for off ulong 3
+p = ulong 0
+if eq off 1
+p = 7
+end
+if eq off 2
+p = 65504
+end
+for k ulong 32
+put s add p k uchar add k 32
+put h k uchar add k 32
+end
+if ne ssbyte mode s p h 1
+ret 11
+end
+for k ulong 32
+for v ulong 256
+put h k uchar v
+want = ulong 0
+if eq v add k 32
+want = 1
+end
+if ne ssbyte mode s p h want
+ret 12
+end
+end
+put h k uchar add k 32
+end
+end
+ret 0
+end
+note Hold a public State fixed while the secret selects each candidate, then flips every byte.
+note Match-index pairs all disclose1; mismatch-position pairs all disclose0.
+note Exercise both validated raw non-shortest CBOR and the production typed-normalized form.
+fn sslists mode ulong count ulong wide ulong to int
+raw = new uchar 65536 0
+s = new uchar 65536 0
+h = new uchar 32 0
+rn = ssstate raw count wide
+sn = ssparsed raw rn s
+if gt sn 65536
+ret 21
+end
+for i ulong count
+ssfill h i
+if or ne ssmatch mode s sn h 1 ne ssmatch mode raw rn h 1
+ret 22
+end
+for k ulong 32
+put h k xor get h k 128
+if or ne ssmatch mode s sn h 0 ne ssmatch mode raw rn h 0
+ret 23
+end
+put h k xor get h k 128
+end
+end
+for k ulong 32
+put h k 255
+end
+if or ne ssmatch mode s sn h 0 ne ssmatch mode raw rn h 0
+ret 24
+end
+ret 0
+end
+fn ssall mode ulong to int
+z = ssbytes mode
+if ne z 0
+ret z
+end
+for wide ulong 2
+for n ulong 3
+z = sslists mode add n 1 wide
+if ne z 0
+ret z
+end
+end
+z = sslists mode 32 wide
+if ne z 0
+ret z
+end
+end
+ret 0
+end

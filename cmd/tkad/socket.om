@@ -1,10 +1,67 @@
 note SPDX-License-Identifier: Apache-2.0
 text ds_sock "tkad.sock"
+note Checked transport quantities use the fixed buffer extent, never wrapped sums.
+fn dsbound n ulong to ulong
+q = new qty ulong 0 ulong 0
+if ne qword q n ulong 65536 int 0
+ret 65537
+end
+ret get q val
+end
+fn dsleft p ulong n ulong to ulong
+a = new qty ulong 0 ulong 0
+b = new qty ulong 0 ulong 0
+o = new qty ulong 0 ulong 0
+if ne qword a n ulong 65536 int 0
+ret 65537
+end
+if ne qword b p ulong 65536 int 0
+ret 65537
+end
+if ne qsub o a b int 0
+ret 65537
+end
+ret get o val
+end
+fn dsgrow p ulong r long n ulong to ulong
+if or gt dsbound n 65536 le r long 0
+ret 65537
+end
+a = new qty ulong 0 ulong 0
+b = new qty ulong 0 ulong 0
+o = new qty ulong 0 ulong 0
+if ne qword a p n int 0
+ret 65537
+end
+if ne qsigned b r n int 0
+ret 65537
+end
+note SC1_CURSOR mutation replaces the checked addition with modular addition.
+if ne qadd o a b int 0
+ret 65537
+end
+ret get o val
+end
+fn dsframe h view uchar 65536 to ulong
+n = ulong 0
+note Four bytes decode a bounded u32; these protocol shifts are intentional.
+for i ulong 4
+n = or n shl ulong get h add i 16 mul i 8
+end
+ret dsbound n
+end
 fn dsio fd int b edit uchar 65536 n ulong output ulong to int
+if gt dsbound n 65536
+ret 1
+end
 p = ulong 0
 deadline = add monons 3000000000
 r = long 0
 while lt p n bound 65537
+count = dsleft p n
+if gt count 65536
+ret 1
+end
 left = sub deadline monons
 if le left 0
 ret 1
@@ -24,9 +81,9 @@ if eq r 0
 ret 1
 end
 if eq output 0
-r = recv fd b p sub n p int 0
+r = recv fd b p count int 0
 else
-r = send fd b p sub n p int 0
+r = send fd b p count int 0
 end
 if or eq r -11 eq r -4
 continue
@@ -34,7 +91,10 @@ end
 if le r 0
 ret 1
 end
-p = add p ulong r
+p = dsgrow p r n
+if gt p 65536
+ret 1
+end
 end
 ret 0
 end
@@ -57,10 +117,7 @@ end
 if or ne get h 6 0 ne get h 7 0
 ret
 end
-n = ulong 0
-for i ulong 4
-n = or n shl ulong get h add i 16 mul i 8
-end
+n = dsframe h
 if gt n 65536
 ret
 end
@@ -75,7 +132,10 @@ put h 4 uchar and z 255
 put h 5 uchar shr z 8
 put h 6 0
 put h 7 0
-n = get ds_ctl 6
+n = dsbound get ds_ctl 6
+if gt n 65536
+ret
+end
 for i ulong 4
 put h add i 8 uchar and shr n mul i 8 255
 end

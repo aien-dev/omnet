@@ -1,0 +1,29 @@
+note SPDX-License-Identifier: Apache-2.0
+note Test-only observation controls, not production replacements.
+note Both preserve equality validity but disclose secret-dependent stopping positions.
+note Native functional success is REQUIRED, not evidence of observation equivalence.
+note Scan exact raw functions with the pinned PR752 scanner; never scan ELF as raw.
+note s contents and p/sn are public, h contents secret, only final validity disclosed.
+fn ssfirstbyte s view uchar 65536 p ulong h view uchar 32 to ulong
+for k ulong 32
+if ne get h k get s add p k
+ret 0
+end
+end
+ret 1
+end
+fn ssfirstlist s view uchar 65536 sn ulong h view uchar 32 to ulong
+t = new ulong 131074 0
+z = cbrdec s sn t
+r = cbrmfind t 0 2
+j = add r 1
+for i ulong cbrval t r
+if eq cbrval t j 32
+if ne dseqhash s cbrpoff t j h 0
+ret 1
+end
+end
+j = cbrnext t j
+end
+ret 0
+end

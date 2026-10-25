@@ -1,0 +1,33 @@
+{
+  "contract_sha256": "ced61decef1ff4efbf5bc81598db648aa810be434e373e9bc1563dbcb4523496",
+  "scanner_dependency_commit": "155ff3178f35013e405ed40d09a7dd75ede2a403",
+  "scanner_source_sha256": "6b14fd9bb6f174de4a87e14b5ae38c9984de48c91a0b18c468bb1197adb2c82c",
+  "scanner_binary_sha256": "aa60061ea85184d98f8fed41ad5b0ab2335d3697aba00a1eca80ba33b910e633",
+  "production_helpers_sha256": "a3e18dba3145f0bcf1d028df04a9de4b1ba829977961b49506cca67d7dd71ebf",
+  "daemon_binary_sha256": "9b453c5d806548b3de329753c1e50dce66cee4295f5decbd447c5a6e9b1f5b0c",
+  "records": [
+    {
+      "name": "dseqhash",
+      "source_sha256": "e4f56e27d0af34a38deaaaf4b6e5085a1c8cb8c5087c34445efc4a845c18fd85",
+      "raw_sha256": "c4f21911c4c58339d5d109b6f4b42bfda0462f326d69e7c663f11d085114e2fe",
+      "raw_bytes": 96,
+      "compile_exit": 0,
+      "scanner_exit": 0,
+      "scanner_stdout": "LEAKSCAN 1 words=24 entry=@0 data=none\nBRANCH @3 b.cs ->@16 len\nBRANCH @5 b.cs ->@22 len trap=3\nMEM @6 ldrb reg base=x2 index=x4 public-index\nBRANCH @10 b.cs ->@22 len trap=3\nMEM @11 ldrb reg base=x0 index=x6 public-index\nMEM @20 ldr imm base=x7 index=- const trap-tail\nSUMMARY branches=3 len=3 trap-check=0 data-branch=0 branch-unreached=0 mem=3 const=1 public-index=2 data-index=0 mem-unreached=0 unknown=0 unhandled=0\nVERDICT TRACE-EQUIV-STATIC PASS\n",
+      "scanner_stderr": "",
+      "whole_raw_occurrences_in_daemon": 0
+    },
+    {
+      "name": "ssfirstbyte",
+      "source_sha256": "8c2c85f675dbf07f4fc8ac38df818985f1a31eafb62439b0f07cb2aed67350ec",
+      "raw_sha256": "5831a051e11ce9ff825c4854f73b97e9c31852c4ad1c512f67e4077b77017015",
+      "raw_bytes": 96,
+      "compile_exit": 0,
+      "scanner_exit": 2,
+      "scanner_stdout": "LEAKSCAN 1 words=24 entry=@0 data=none\nBRANCH @2 b.cs ->@17 len\nBRANCH @4 b.cs ->@22 len trap=3\nMEM @5 ldrb reg base=x2 index=x3 public-index\nBRANCH @9 b.cs ->@22 len trap=3\nMEM @10 ldrb reg base=x0 index=x5 public-index\nBRANCH @12 b.eq ->@15 data MANUAL\nMEM @20 ldr imm base=x7 index=- const trap-tail\nSUMMARY branches=4 len=3 trap-check=0 data-branch=1 branch-unreached=0 mem=3 const=1 public-index=2 data-index=0 mem-unreached=0 unknown=0 unhandled=0\nVERDICT TRACE-EQUIV-STATIC NOT_RUN\n",
+      "scanner_stderr": "",
+      "whole_raw_occurrences_in_daemon": 0
+    }
+  ],
+  "limit": "function-mode static scan only; program-mode correspondence requires emitted word equality or owner relation, wholeclosure and physical timing unqualified"
+}

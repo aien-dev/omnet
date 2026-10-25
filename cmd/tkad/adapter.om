@@ -183,6 +183,19 @@ ret 1
 end
 ret 0
 end
+note Advance the candidate snapshot identity with checked original revision before persistence.
+fn dsadvance to int
+a = new qty ulong 0 ulong 0
+b = new qty ulong 0 ulong 0
+if ne qword a dsget 6 18446744073709551615 int 0
+ret 409
+end
+if ne qnext b a int 0
+ret 409
+end
+dsset 6 get b val
+ret 200
+end
 fn dsrequest raw view uchar 65536 n ulong out edit uchar 65536 to int
 t = new ulong 32768 0
 d = new uchar 65536 0
@@ -205,10 +218,8 @@ if and eq z 200 gt get ds_ctl 6 65536
 z = 413
 end
 if and eq z 200 ne get ds_ctl 5 0
-if eq dsget 6 18446744073709551615
-z = 409
-else
-dsset 6 add dsget 6 1
+z = dsadvance
+if eq z 200
 s = dssave
 if eq s 2
 exit 74

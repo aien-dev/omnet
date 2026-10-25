@@ -1,0 +1,93 @@
+{
+  "base": "1e075776855d4389b69b23b54b49ed230d488717",
+  "contract_sha256": "ced61decef1ff4efbf5bc81598db648aa810be434e373e9bc1563dbcb4523496",
+  "compiler_sha256": "734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61",
+  "daemon_source_sha256": "d8a99f89afc3fa9503f313d6cc03355bf5c9179af73e1e4437272169585f6872",
+  "daemon_binary_sha256": "9b453c5d806548b3de329753c1e50dce66cee4295f5decbd447c5a6e9b1f5b0c",
+  "records": [
+    {
+      "name": "quantity",
+      "source_sha256": "f29bdd2838087a25c93ff758bad49621f8f829e85cbd5b0ecac8582f09c2b45d",
+      "compile_exit": 0,
+      "compile_stderr": "",
+      "runs": [
+        {
+          "args": [],
+          "exit": 0,
+          "stdout": "PASS SC1_CURSOR SC1_NOOP actual consumer calls\n",
+          "stderr": ""
+        }
+      ],
+      "binary_sha256": "bbb254f6ee84a197f85669ebdf9ef826ca72109ba6441143c8bbbbea775f2139"
+    },
+    {
+      "name": "secret",
+      "source_sha256": "4f124c702204867838a62b70851f25fef9a73e518d85ae12d1b20217be3f9ebd",
+      "compile_exit": 0,
+      "compile_stderr": "",
+      "runs": [
+        {
+          "args": [],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "byte"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "list",
+            "list"
+          ],
+          "exit": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "args": [
+            "bad",
+            "bad",
+            "bad"
+          ],
+          "exit": 12,
+          "stdout": "",
+          "stderr": ""
+        }
+      ],
+      "binary_sha256": "b9f3b08feb4a9dc27adcf54b991921e93fc2f13a97ee6857076c08311060c304"
+    },
+    {
+      "name": "consumer-mutator",
+      "source_sha256": "fff9e1d1c5283af0f0d97bc53bc4e9ed878ff9c925c428f4c27d91f79e0e7f46",
+      "binary_sha256": "3e501f8baf743adb4ef71700acf0f39cf62e0dcbf69fb2aab5c527bc03520fd3",
+      "compile_exit": 0
+    },
+    {
+      "name": "SC1_CURSOR-mutant",
+      "source_sha256": "6b3e034623f1b60949b707a7bc75ae5f12b3367c39b507eaf951fbcc577d40da",
+      "binary_sha256": "68eab268a634d69b9e610eab29c893533654a953246279ad400e1fbe6efb96aa",
+      "transform_exit": 0,
+      "compile_exit": 0,
+      "exit": 1,
+      "stdout": "FAIL SC1_CURSOR\n",
+      "stderr": ""
+    },
+    {
+      "name": "SC1_NOOP-mutant",
+      "source_sha256": "88b4ae92d0762ab33ad624326d6de8cafc322a502d14968e5011ab4c368901c7",
+      "binary_sha256": "20265f4c334b2a953656a83e93cf98ddc76c1f44d2e24f39cad00be12141e627",
+      "transform_exit": 0,
+      "compile_exit": 0,
+      "exit": 1,
+      "stdout": "FAIL SC1_NOOP\n",
+      "stderr": ""
+    }
+  ],
+  "scope": "native functional consumer fixtures and compiled mutants; not whole service secrecy or durable quotas"
+}

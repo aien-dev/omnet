@@ -100,6 +100,9 @@ chosen head; mismatch rejects the candidate. Noninteractive sync validates the
 head encoding but permits a divergent remote head. Disable requires admin, the
 current head and a valid bounded secret. A disabled authority remains available
 for bootstrap's disablement secret and cannot be reinitialized in this profile.
+Already-retained canonical AUMs and an empty update list are successful no-ops:
+they do not advance Revision or rewrite the snapshot. Different wire encodings
+with the same typed canonical AUMHash remain upstream-compatible no-ops.
 
 Each mutating request operates on an inactive candidate slot, including registry,
 signatures, pending state, support/disablement secrets and authority. The complete
@@ -182,3 +185,26 @@ notices remain in `om/tka/tailscale.LICENSE` and
 `om/tkasig/test/tailscale.LICENSE`. The Go fixture generator imports the pinned
 upstream module and contains no copied upstream source. Its deterministic
 private test keys are public fixtures, never deployment keys.
+
+## SC1 checked consumer proposal
+
+Transport frame lengths, remaining counts, positive syscall results and cursor
+advancement use `om/quantity`; candidate Revision advances through checked
+`qnext` before persistence and retains the existing409-on-exhaustion contract.
+This does not migrate every parser/response/store length or make Revision a policy
+epoch. The remaining source-bound inventory is in
+`qualification/security3-consumer/quantities.json`.
+
+Disablement hash comparison now reads all32 bytes and candidate matching traverses
+the full public list. This removes the source early exits, not the README's
+constant-time qualification limit. A function-mode scanner passes the hash helper,
+but full-list analysis and program-mode emitted correspondence remain unqualified.
+Secret contents, public lengths/shapes and authorized bootstrap disclosure are
+specified separately in the SC1 evidence documentation.
+
+New first-party test/control/orchestration logic is `.om`. The existing test glob
+loads `om/quantity/test/run.sh`, whose only role is compiler bootstrap and exec of
+`qualification/security3/run.om --consumer-units`; all test decisions are native.
+See `qualification/security3/README.md` for the synthetic two-client tutorial,
+raw process-crash/fault results and matched baseline/candidate measurements, and
+`qualification/security3-consumer/README.md` for implementation and owner limits.

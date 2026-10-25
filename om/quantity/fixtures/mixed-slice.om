@@ -1,0 +1,7 @@
+note A previously formed slice is not a quantity operand.
+fn main to int
+out = new qty ulong 0 ulong 8
+a = new qslic ulong 1 ulong 0 ulong 0 ulong 1
+b = new qty ulong 1 ulong 8
+ret qadd out a b
+end

@@ -1,0 +1,13 @@
+note SPDX-License-Identifier: Apache-2.0
+note Argument contents unused. Zero extra args tests production, exit0 expected.
+note One extra arg tests byte early-return control, exit0 functionally expected.
+note Two extra args test candidate early-return control, exit0 functionally expected.
+note Three extra args test constant-valid control, completed assertion exit12 expected.
+note Exit0 for either observation control is NOT a secrecy pass. Scanner evidence is separate.
+fn main to int
+mode = sub ulong argcnt 1
+if gt mode 3
+ret 2
+end
+ret ssall mode
+end

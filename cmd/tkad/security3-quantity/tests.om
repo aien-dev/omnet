@@ -1,0 +1,201 @@
+note SPDX-License-Identifier: Apache-2.0
+note Compose the full production build list except main.om, then this fixture main.
+note Includes quantity.om and the actual socket.om/rpc.om; no handler replicas.
+note Public deterministic genesis/update copied from cmd/tkad/test/fixture.json.
+text cqgen "pAEFAvYFpQH2AoFYILTFrDQBTkQarp7XQWKK2+s40ndKlQxYmA9vuO4wtAI2A4KjAQECAQNYIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29cpAEBAgEDWCCBOXcOqH0XX1ajVGbDTH7My42KkbTuN6Jd9g9bj8mzlAyhZHJvbGVjb2xkBBh7BRkByBeBogFYIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29cAlhAvq6wLI0Zd6J6sDwK930ZQ/Xq4DPeFwzctcXkiygjDkzhUftSo+O4C/iTJINgWADWOY1obOsNS+xuGOpFtn1/Dw=="
+text cqupd "owEDAlgg7EVgag0pttmYZxeW/KSoV2RRJWFdQUNJn4p2g/j8dVMXgaIBWCCKiOPddAnxlf1S2y08ul1yymcJvx2UEhvzdIgBtA9vXAJYQGuq6mnwdcC4gWr82f70JmTEukBPdPEWcwvYEJRjR33XdVztmeP+/9yKoeYP25MafLpWRjRWTSttFRvQtrPyjgI="
+text cqtail ",\"Interactive\":true,\"MissingAUMs\":["
+text cqfail "FAIL SC1_CURSOR\n"
+text cqno "FAIL SC1_NOOP\n"
+text cqok "PASS SC1_CURSOR SC1_NOOP actual consumer calls\n"
+
+fn cqquant to bool
+if ne dsbound 18446744073709551615 65537
+ret false
+end
+if ne dsleft 65537 65536 65537
+ret false
+end
+if ne dsleft 1 0 65537
+ret false
+end
+if ne dsleft 18446744073709551608 16 65537
+ret false
+end
+if ne dsleft 65536 65536 0
+ret false
+end
+if ne dsleft 0 65536 65536
+ret false
+end
+if ne dsgrow 65535 long 2 65536 65537
+ret false
+end
+if ne dsgrow 3 long 2 4 65537
+ret false
+end
+if ne dsgrow 18446744073709551608 long 16 65536 65537
+ret false
+end
+if ne dsgrow 0 long -1 65536 65537
+ret false
+end
+if ne dsgrow 0 long 0 65536 65537
+ret false
+end
+if ne dsgrow 0 long 65537 65536 65537
+ret false
+end
+if ne dsgrow 65535 long 1 65536 65536
+ret false
+end
+if ne dsgrow 0 long 1 1 1
+ret false
+end
+b = new uchar 65536 0
+if ne dsframe b 0
+ret false
+end
+put b 18 1
+if ne dsframe b 65536
+ret false
+end
+put b 16 1
+if ne dsframe b 65537
+ret false
+end
+for i ulong 4
+put b add i 16 255
+end
+if ne dsframe b 65537
+ret false
+end
+note Invalid extent must refuse before even waiting on invalid fd, with no trap.
+if ne dsio int -1 b 18446744073709551615 0 int 1
+ret false
+end
+if ne dsio int -1 b 0 1 int 0
+ret false
+end
+note The actual snapshot revision reaches max exactly, then refuses without wrapping.
+dsselect 0
+dsset 6 18446744073709551614
+if ne dsadvance int 200
+ret false
+end
+if ne dsget 6 18446744073709551615
+ret false
+end
+if ne dsadvance int 409
+ret false
+end
+if ne dsget 6 18446744073709551615
+ret false
+end
+dsset 6 0
+ret true
+end
+
+fn cqdecode out edit uchar 65536 update ulong to ulong
+b = new uchar 65536 0
+if eq update 0
+for i ulong len cqgen
+put b i get cqgen i
+end
+ret cdb64dec b len cqgen out
+end
+for i ulong len cqupd
+put b i get cqupd i
+end
+ret cdb64dec b len cqupd out
+end
+
+fn cqsend a view uchar 65536 n ulong inter ulong bad ulong to int
+b = new uchar 65536 0
+p = dslit b 0 10
+p = dsputhead b p
+if ne bad 0
+note Change a base32 character without changing syntax or length.
+put b 9 65
+end
+for i ulong len cqtail
+put b add p i get cqtail i
+end
+note false has one extra byte; use null (upstream noninteractive) in-place instead.
+if eq inter 0
+put b add p 15 110
+put b add p 16 117
+put b add p 17 108
+put b add p 18 108
+end
+p = add p len cqtail
+if ne n 0
+p = dsput64 b p a n
+end
+p = jsonbyte b p 93
+p = jsonbyte b p 125
+t = new ulong 32768 0
+d = new uchar 65536 0
+if ne jsonparse b p t d int 0
+ret 500
+end
+o = new uchar 65536 0
+put ds_ctl 5 0
+ret dssend t d o
+end
+
+fn cqnoop to bool
+a = new uchar 65536 0
+n = cqdecode a 0
+z = tkaselect 0
+tkareset
+if ne tkaboot a n 0
+ret false
+end
+dsset 0 2
+if ne cqsend a 0 1 0 int 200
+ret false
+end
+if ne get ds_ctl 5 0
+ret false
+end
+if ne cqsend a n 1 0 int 200
+ret false
+end
+if or ne get ds_ctl 5 0 ne tkacget 0 1
+ret false
+end
+if ne cqsend a n 1 1 int 409
+ret false
+end
+if ne get ds_ctl 5 0
+ret false
+end
+n = cqdecode a 1
+if ne cqsend a n 0 0 int 200
+ret false
+end
+if or ne get ds_ctl 5 1 ne tkacget 0 2
+ret false
+end
+if ne cqsend a n 1 0 int 200
+ret false
+end
+if or ne get ds_ctl 5 0 ne tkacget 0 2
+ret false
+end
+ret true
+end
+
+fn main to int
+if not cqquant
+z = write int 1 cqfail 0 len cqfail
+ret 1
+end
+if not cqnoop
+z = write int 1 cqno 0 len cqno
+ret 1
+end
+z = write int 1 cqok 0 len cqok
+ret 0
+end
