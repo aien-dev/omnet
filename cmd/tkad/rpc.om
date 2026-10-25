@@ -309,10 +309,12 @@ r = dsfield t d 7
 if and ne r 0 and ne dskind t r 2 ne dskind t r 7
 ret 400
 end
-before = tkacget 0
 if ne tkabegin 0
 ret 500
 end
+note Retained nodes before staging: a replay of an AUM we already have stages
+note nothing, and must not be published as a durable change below.
+rb = tkacget 0
 b = new uchar 65536 0
 if eq dskind t r 2
 j = add r 1
@@ -339,10 +341,9 @@ end
 p = dslit out 0 10
 p = dsputhead out p
 put ds_ctl 6 dslit out p 5
-note Retained hashes return before tkastore; only tkastore increases count.
-note With no insertion immutable nodes and deterministic fork choice are unchanged.
-note SC1_NOOP mutation restores unconditional snapshot dirty marking.
-if ne tkacget 0 before
+note Publish only when the commit appended a node. A retained or empty AUM
+note replay leaves the head, revision and stored bytes unchanged.
+if gt tkacget 0 rb
 put ds_ctl 5 1
 end
 ret 200

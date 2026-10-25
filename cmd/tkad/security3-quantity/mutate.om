@@ -4,7 +4,7 @@ note Argument c: socket.om stdin, unchecked cursor addition stdout.
 note Argument n: rpc.om stdin, unconditional no-op dirty marking stdout.
 note Exactly one match required. Exit0 success; 2 usage,3 input,4 match,5 output.
 text cqguard "if ne qadd o a b int 0\nret 65537\nend\nret get o val\n"
-text cqnop "if ne tkacget 0 before\nput ds_ctl 5 1\nend\n"
+text cqnop "if gt tkacget 0 rb\nput ds_ctl 5 1\nend\n"
 text cqbad "ret add p ulong r\n"
 text cqdirty "put ds_ctl 5 1\n"
 global cqsrc uchar 32768
