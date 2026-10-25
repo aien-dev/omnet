@@ -124,7 +124,10 @@ that headscale connects to (design rule 4). A crash in tkad, which is what an Om
 TKA requests. It never makes headscale skip verification: the glue fails closed.
 
 **Message limits**: every request body is capped (64 KiB, the capacity of the crypto units) before
-it is parsed, and the number of AUMs per sync is capped (design rule 1). The pinned client caps
+it is parsed, and the number of AUMs per sync is capped (design rule 1). Some fields have tighter
+limits, which the request handler checks before calling a unit. A decoded `DisablementSecret` longer
+than 1024 bytes is rejected, because `om/argon2` `a2tka` traps on longer input. The client sends
+32 bytes. The pinned client caps
 successful responses at 1 MiB or 10 MiB depending on the RPC. It reads non-200 error bodies with an
 unbounded `io.ReadAll` (`tailnet-lock.go`), so a compromised server can still exhaust client memory
 that way. That is a client issue outside this project; tkad's error bodies are short fixed strings.
@@ -136,9 +139,10 @@ that way. That is a client issue outside this project; tkad's error bodies are s
 | BLAKE2s-256 (`om/blake2s`) | Omega | done: RFC 7693 vectors, KAT 256/256, 2,266-case differential |
 | SHA-512 (`om/sha512`) | Omega | done: NIST CAVP short, long and Monte Carlo vectors, differential |
 | Ed25519 verify, strict and ZIP-215 (`om/ed25519`) | Omega | done: RFC 8032, ZIP-215 196/196, Wycheproof, Go 1.26 used as oracle |
-| BLAKE2b + Argon2i (disablement) | Omega | next |
-| base64, base32, hex codecs | Omega | next |
-| CTAP2 CBOR encode and decode (bounded depth and length) | Omega | next |
+| BLAKE2b (`om/blake2b`) | Omega | done: RFC 7693 vectors, KAT 256/256, 2,266-case differential |
+| Argon2i, TKA disablement KDF (`om/argon2`) | Omega | done: RFC 9106 §5.2, 41 Go cases incl. TKA parameters, 200 random Go cases |
+| base64, base32, hex, `nodekey:` codecs (`om/codec`) | Omega | done: RFC 4648 §10, 249 malformed cases, 39,806-case Go differential |
+| CTAP2 CBOR encode and decode, bounded (`om/cbor`) | Omega | done: RFC 8949 App. A, 1,200 `tka` structures byte-identical with matching `AUM.Hash`, 475 hostile cases |
 | AUM / State / NodeKeySignature model and validation | Omega | planned |
 | Chain: fork choice, state at hash, sync offer, intersection, Inform | Omega | planned |
 | JSON for the eight RPC types | Omega | planned |
@@ -155,6 +159,9 @@ Each component is checked against two referees: published vectors where they exi
   sync offers and missing-AUM sets must equal `tka.Authority`'s.
 - **Negative corpus**: truncated CBOR, non-canonical CBOR, oversized fields, unknown kinds, wrong
   parents and bad signatures. Each must be rejected, with no trap (a trap is a denial-of-service bug).
+  Type-level rejections that a generic CBOR layer cannot decide (a wrong field type, an out-of-range
+  integer, a duplicate `Meta` key, bad UTF-8 in `Meta`) belong to the model layer; `om/cbor`'s hostile
+  corpus already marks these cases for it.
 - **End to end**: stock clients in containers against the patched headscale. Run `tailscale lock
   init`, sign, add a node, remove a key, rotate a node key, and disable. Check that an unsigned node is
   refused by its peers.
@@ -162,7 +169,7 @@ Each component is checked against two referees: published vectors where they exi
 ## Plan and status
 
 1. Crypto primitives: BLAKE2s, SHA-512, Ed25519. **Done.**
-2. BLAKE2b, Argon2i, codecs, CBOR.
+2. BLAKE2b, Argon2i, codecs, CBOR. **Done.**
 3. TKA model and chain logic, differential against `tka`.
 4. tkad service, storage, JSON.
 5. headscale glue and end-to-end tests with stock clients.
