@@ -5,6 +5,9 @@
 # Consensus expected = ed25519consensus v0.2.0 run as referee. Signatures that are not
 # 64 bytes long cannot be passed to edverify (tcId 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41;
 # all 'invalid'; Go rejects them by length).
+# Copyright 2016-2026 The Wycheproof Authors, licensed under the Apache License 2.0
+# (wycheproof.LICENSE, upstream LICENSE verbatim). Modified: converted from JSON to
+# this line format by gen/vectors.py; tests with signatures not 64 bytes left out.
 # tcId 1 valid Valid
 1 1 7d4d0e7f6153a69b6242b522abbee685fda4420f8834b108c3bdae369ef549fa d4fbdb52bfa726b44d1786a8c0d171c3e62ca83c9e5bbe63de0bb2483f8fd6cc1429ab72cafc41ab56af02ff8fcc43b99bfe4c7ae940f60f38ebaa9d311c4007 
 # tcId 2 valid Valid

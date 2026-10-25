@@ -2,6 +2,9 @@
 # one-bit-flipped variants. Source: https://www.rfc-editor.org/rfc/rfc8032.txt
 # sha256 ed63657ff389301282b169b0abde9b5dd2c7e4d524fdfa5da6ff3094fc93c4c3. Expected: 1 for the RFC vectors, 0 for every flip
 # (Go crypto/ed25519 and ed25519consensus agree on every line).
+# Keys, messages and signatures are from RFC 8032, Copyright (c) 2017 IETF Trust and the
+# persons identified as the document authors (S. Josefsson, I. Liusvaara); see
+# rfc8032.NOTICE. Converted to this line format (and bit flips added) by gen/vectors.py.
 # TEST 1 (0-byte message)
 1 1 d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b 
 # TEST 1 R bit 3 flipped

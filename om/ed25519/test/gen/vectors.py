@@ -3,7 +3,10 @@
 
 Usage: python3 vectors.py SRC ORACLE OUT
   SRC     directory holding the pinned upstream files (pinned URLs in om/ed25519/README.md):
-          rfc8032.txt, zip215_test.go, ed25519_test.json
+          rfc8032.txt, zip215_test.go, ed25519_test.json, and the upstream licenses
+          ed25519consensus.LICENSE and wycheproof.LICENSE (copied verbatim to OUT as
+          zip215.LICENSE and wycheproof.LICENSE; OUT/rfc8032.NOTICE is cut from the RFC's own
+          Copyright Notice section)
   ORACLE  the Go referee built from gen/oracle (reads "PK SIG MSG" lines, prints "S C")
   OUT     output directory (om/ed25519/test/vectors)
 
@@ -15,6 +18,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 
@@ -87,6 +91,9 @@ def rfc(src, exe, out):
         f.write("# one-bit-flipped variants. Source: https://www.rfc-editor.org/rfc/rfc8032.txt\n")
         f.write(f"# sha256 {sha256(path)}. Expected: 1 for the RFC vectors, 0 for every flip\n")
         f.write("# (Go crypto/ed25519 and ed25519consensus agree on every line).\n")
+        f.write("# Keys, messages and signatures are from RFC 8032, Copyright (c) 2017 IETF Trust and the\n")
+        f.write("# persons identified as the document authors (S. Josefsson, I. Liusvaara); see\n")
+        f.write("# rfc8032.NOTICE. Converted to this line format (and bit flips added) by gen/vectors.py.\n")
         for (pk, sig, msg, exp, name), g in zip(cases, go):
             assert g == (exp, exp), (name, g)
             f.write(f"# {name}\n")
@@ -110,6 +117,11 @@ def zip215(src, exe, out):
         f.write(f"# sha256 {sha256(path)}. Consensus expected 1 for all 196 (TestZIP215).\n")
         f.write("# Strict expected = Go 1.26.0 crypto/ed25519.Verify, run as referee "
                 f"({ns} of 196 accepted).\n")
+        f.write("# The key and signature hex strings are copied from that file (header: Copyright 2016\n")
+        f.write("# Henry de Valence. All rights reserved. Use of this source code is governed by a\n")
+        f.write("# BSD-style license). Redistributed under that license, included verbatim as\n")
+        f.write("# zip215.LICENSE (Copyright (c) 2009 The Go Authors; Copyright (c) 2020 Henry de\n")
+        f.write("# Valence). Converted to this line format by gen/vectors.py.\n")
         for (pk, sig, m), g in zip(cases, go):
             assert g[1] == 1
             f.write(line(g[0], 1, pk, sig, m))
@@ -140,6 +152,9 @@ def wycheproof(src, exe, out):
         f.write("# Consensus expected = ed25519consensus v0.2.0 run as referee. Signatures that are not\n")
         f.write(f"# 64 bytes long cannot be passed to edverify (tcId {', '.join(map(str, skipped))};\n")
         f.write("# all 'invalid'; Go rejects them by length).\n")
+        f.write("# Copyright 2016-2026 The Wycheproof Authors, licensed under the Apache License 2.0\n")
+        f.write("# (wycheproof.LICENSE, upstream LICENSE verbatim). Modified: converted from JSON to\n")
+        f.write("# this line format by gen/vectors.py; tests with signatures not 64 bytes left out.\n")
         for (pk, sig, msg, t), g in zip(cases, go):
             if t["result"] == "valid":
                 assert g[0] == 1, t["tcId"]
@@ -295,11 +310,24 @@ def small_order_encodings():
     return out + extra
 
 
+def notices(src, out):
+    """Third-party notices that must travel with the copied vectors."""
+    for name, dst in (("ed25519consensus.LICENSE", "zip215.LICENSE"),
+                      ("wycheproof.LICENSE", "wycheproof.LICENSE")):
+        shutil.copyfile(os.path.join(src, name), os.path.join(out, dst))
+    text = open(os.path.join(src, "rfc8032.txt")).read().split("\n")
+    a = text.index("Copyright Notice")
+    b = next(i for i in range(a + 1, len(text)) if text[i - 1].strip().endswith("to this document."))
+    with open(os.path.join(out, "rfc8032.NOTICE"), "w") as f:
+        f.write("The keys, messages and signatures in rfc8032.txt are copied from RFC 8032\n")
+        f.write("(https://www.rfc-editor.org/rfc/rfc8032.txt), section 7.1. Its notice, verbatim:\n\n")
+        f.write("\n".join(text[a:b]) + "\n")
 
 
 def main():
     src, exe, out = sys.argv[1:4]
     os.makedirs(out, exist_ok=True)
+    notices(src, out)
     print("rfc8032", rfc(src, exe, out))
     print("zip215 cases, strict-accepted", zip215(src, exe, out))
     n, skipped, acc = wycheproof(src, exe, out)

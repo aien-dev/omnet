@@ -54,7 +54,10 @@ The server also writes into the map stream:
   change deltas.
 
 `RegisterRequest.NodeKeySignature` arrives at registration and when a node rotates its key. It must be
-stored and served as that node's `KeySignature`.
+stored and served as that node's `KeySignature`. `RegisterRequest.NLKey` is the node's tailnet-lock
+public key. It must be stored too, because `init/begin` returns it as `TKASignInfo.RotationPubkey`. The
+client copies that value into the signature's `WrappingPubkey` (`tailnet-lock.go` `signNodeKey`), and
+a later key rotation fails verification without it (`tka/sig.go:260-274`).
 
 ### Data formats that must match byte for byte
 
@@ -74,8 +77,9 @@ stored and served as that node's `KeySignature`.
   (strict, mode 0). A server that uses a different rule from the clients splits the tailnet.
 - **Disablement values**: `argon2.Key(secret, "tailscale network-lock disablement salt", t=4,
   m=16 MiB, p=4, len=32)`. That is **Argon2i**, which hashes with BLAKE2b.
-- **Fork choice**: when two AUMs share a parent, `tka/tka.go` `pickNextAUM` decides deterministically
-  by signature weight and then by hash. The server must pick the same chain the clients pick.
+- **Fork choice**: when two AUMs share a parent, `tka/tka.go` `pickNextAUM` decides deterministically:
+  (1) the highest signature weight wins; (2) on equal weight, a RemoveKey AUM wins; (3) otherwise the
+  lowest AUM hash wins. The server must pick the same chain the clients pick.
 
 ## Architecture
 
@@ -106,7 +110,8 @@ after it is durable.
 **headscale glue** (Go, in a headscale fork) holds no protocol logic. It:
 1. Registers the eight `/machine/tka/*` routes on the Noise router. Each passes the authenticated
    node identity and the raw request body to tkad and returns tkad's reply unchanged.
-2. Supplies tkad with the node list (NodeID, node key) on request. `init/begin` needs it.
+2. Supplies tkad with the node list (NodeID, node key, tailnet-lock public key) on request.
+   `init/begin` needs it.
 3. Puts `TKAInfo` (from tkad) and each node's stored `KeySignature` into map responses, and wakes
    map streams when tkad reports a head change.
 4. Forwards `RegisterRequest.NodeKeySignature` to tkad.
@@ -119,8 +124,10 @@ that headscale connects to (design rule 4). A crash in tkad, which is what an Om
 TKA requests. It never makes headscale skip verification: the glue fails closed.
 
 **Message limits**: every request body is capped (64 KiB, the capacity of the crypto units) before
-it is parsed, and the number of AUMs per sync is capped (design rule 1). The client itself limits
-responses to 10 MiB (`tailnet-lock.go`).
+it is parsed, and the number of AUMs per sync is capped (design rule 1). The pinned client caps
+successful responses at 1 MiB or 10 MiB depending on the RPC. It reads non-200 error bodies with an
+unbounded `io.ReadAll` (`tailnet-lock.go`), so a compromised server can still exhaust client memory
+that way. That is a client issue outside this project; tkad's error bodies are short fixed strings.
 
 ## Components
 
