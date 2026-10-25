@@ -14,9 +14,8 @@ Rules:
   name carries the unit prefix. Each unit has `test/run.sh`, committed vectors with their source URL and
   fetch date, and a mutant check.
 - **Public repository.** No hostnames, IP addresses, domains, usernames, home-directory paths,
-  credentials, or names of private repositories in any file, issue, or PR. Deployment details live
-  outside this repository. Commit author identity is the organization's public commit identity
-  (`Drake Stapleton <drake@aienos.com>`), the same as on its other public repositories.
+  credentials, names of private repositories, or names of the people behind the work in any file,
+  issue, or PR. Deployment details live outside this repository.
 - **Claims carry evidence.** Every number names its source: a command and its output, a vector file,
   or the arithmetic. Verdicts are PASS, FAIL, NOT_RUN. Never claim constant-time behaviour, or the
   absence of a vulnerability, without a check that shows it.
