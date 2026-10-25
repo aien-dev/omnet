@@ -102,10 +102,20 @@ flowchart LR
 
 It listens on a local socket, using the Omega native host operations from omega-mv `seed/host/`.
 
-**Storage**: an append-only directory of AUM files named by hash, plus one state file that is
-replaced by write, fsync and rename. Every file is opened through descriptors, never re-checked by path
-(design rule 2). A request that would change the head is applied to a copy and becomes visible only
-after it is durable.
+**Storage design for stage four**: a single versioned whole-service snapshot, including authority
+updates in reconstruction-preserving typed form, node records/signatures, pending initialization,
+and disablement state. A candidate is built in the inactive authority slot. Write a temporary file,
+fsync it, rename it over the committed snapshot, then fsync the directory before publishing the
+candidate or acknowledging success. Failure after rename but before directory fsync is an uncertain
+commit: stop serving, do not attempt a rollback rename. Recovery validates the entire committed
+snapshot; a missing or corrupt snapshot is not interpreted as disabled TKA.
+
+The state directory is provisioned under trusted ancestors, owned by the effective UID, and mode
+0700. Open and validate its descriptor, then use fixed relative names after `fchdir`; reject
+unexpected file types, permissions, ownership and hard links. A separate bind-only abstract Unix
+socket keyed by directory device/inode provides writer exclusion in one Linux network namespace.
+Only its holder may remove a stale RPC socket. All writers must use the same network namespace;
+same-UID processes and root remain trusted. This is not cross-namespace locking.
 
 **headscale glue** (Go, in a headscale fork) holds no protocol logic. It:
 1. Registers the eight `/machine/tka/*` routes on the Noise router. Each passes the authenticated
@@ -119,9 +129,11 @@ after it is durable.
 Its only decision is which nodes may call admin RPCs: `init/*` and `disable` are restricted to the
 tailnet owner. It makes that decision from headscale's own user model.
 
-**Privilege**: tkad runs as its own unprivileged user. It owns only its state directory and the socket
-that headscale connects to (design rule 4). A crash in tkad, which is what an Omega trap is, refuses
-TKA requests. It never makes headscale skip verification: the glue fails closed.
+**Local trust boundary for stage four**: the RPC socket lives inside the private state directory.
+Same-UID local adapters may supply authenticated node identity and administrator assertions;
+the daemon does not authenticate remote Tailscale clients itself. Before separate-UID Headscale
+integration, move the RPC socket into a distinct access-controlled directory without granting the
+adapter access to the state files. Production integration must fail closed on daemon errors.
 
 **Current unit limits**: model and crypto inputs are capped at 64 KiB. The in-memory authority holds
 128 AUMs per slot and two slots; capacity exhaustion returns an error without evicting history.
