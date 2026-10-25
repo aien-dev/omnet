@@ -62,9 +62,11 @@ denial-of-service bug.
 |---|---|
 | `om/<unit>/<unit>.om` | Omega library: functions only, no globals, no `main` |
 | `om/<unit>/test/` | Program-mode test driver, vectors, `run.sh` |
+| `cmd/tkad/` | Native Omega local daemon, RPC handlers, recovery and real-socket tests |
+| `tools/build-tkad.sh` | Builds the daemon with the pinned compiler |
 | `docs/design/` | Design documents |
 | `tools/omc.sh` | Builds the pinned seed-born Omega compiler and verifies its digest |
-| `tools/test.sh` | Runs every unit's tests |
+| `tools/test.sh` | Runs library and daemon suites |
 
 ## Build and test
 
@@ -77,9 +79,14 @@ tools/test.sh      # builds the pinned compiler on first use, then runs every un
 
 ## Status
 
-Pre-alpha. Crypto and encoding units, typed TKA models, node-key signature verification, and a
-bounded in-memory authority are implemented in Omega. There is no daemon, durable authority store,
-or headscale integration yet; this code does not currently protect a tailnet.
+Pre-alpha. The Omega daemon implements all eight TKA RPCs, node registry/map operations, durable
+snapshots, and validated restart recovery over a private Unix socket. Its local adapter is trusted
+and must run as the same UID; the daemon does not authenticate remote Tailscale clients.
+
+The current profile supports one tailnet, 64 nodes, 128 authority updates and 64-KiB JSON messages.
+Headscale integration and stock-client end-to-end qualification remain pending. This is not yet
+deployed tailnet protection. Build with `tools/build-tkad.sh`; see
+[`cmd/tkad/README.md`](cmd/tkad/README.md) before running it.
 
 See [`docs/design/tailnet-lock.md`](docs/design/tailnet-lock.md) for the implementation limits,
 verification plan, and remaining stages.

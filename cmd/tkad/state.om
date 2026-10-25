@@ -1,0 +1,400 @@
+note SPDX-License-Identifier: Apache-2.0
+note Service candidates use the inactive authority slot. No live mutation precedes durability.
+global ds_ctl ulong 8
+global ds_meta ulong 32
+global ds_ids ulong 128
+global ds_slen ulong 128
+global ds_auth ulong 128
+global ds_key uchar 4096
+global ds_rot uchar 4096
+global ds_sig uchar 8388608
+global ds_sup uchar 2048
+global ds_dis uchar 2048
+
+fn dsget f ulong to ulong
+ret get ds_meta add mul get ds_ctl 1 16 f
+end
+fn dsset f ulong v ulong to void
+put ds_meta add mul get ds_ctl 1 16 f v
+end
+fn dsrow i ulong to ulong
+ret add mul get ds_ctl 1 64 i
+end
+fn dsselect lane ulong to void
+put ds_ctl 1 lane
+z = tkaselect lane
+end
+fn dsid i ulong to ulong
+ret get ds_ids dsrow i
+end
+fn dsfind id ulong to ulong
+for i ulong dsget 1
+if eq dsid i id
+ret i
+end
+end
+ret 64
+end
+fn dskey i ulong out edit uchar 32 rot ulong to void
+for j ulong 32
+if eq rot 0
+put out j get ds_key add mul dsrow i 32 j
+else
+put out j get ds_rot add mul dsrow i 32 j
+end
+end
+end
+fn dssig i ulong out edit uchar 65536 to ulong
+n = get ds_slen dsrow i
+for j ulong n
+put out j get ds_sig add mul dsrow i 65536 j
+end
+ret n
+end
+fn dssetsig i ulong src view uchar 65536 n ulong auth ulong to void
+put ds_slen dsrow i n
+put ds_auth dsrow i auth
+for j ulong n
+put ds_sig add mul dsrow i 65536 j get src j
+end
+end
+fn dsclonenode a ulong b ulong to void
+put ds_ids b get ds_ids a
+put ds_slen b get ds_slen a
+put ds_auth b get ds_auth a
+for j ulong 32
+put ds_key add mul b 32 j get ds_key add mul a 32 j
+put ds_rot add mul b 32 j get ds_rot add mul a 32 j
+end
+for j ulong get ds_slen a
+v = get ds_sig add mul a 65536 j
+put ds_sig add mul b 65536 j v
+end
+end
+fn dscloneaum a ulong b ulong to void
+for j ulong 6
+put tkap_m add mul b 6 j get tkap_m add mul a 6 j
+end
+for j ulong get tkap_m mul a 6
+v = get tkap_a add mul a 65536 j
+put tkap_a add mul b 65536 j v
+end
+for j ulong get tkap_m add mul a 6 1
+v = get tkap_s add mul a 65536 j
+put tkap_s add mul b 65536 j v
+end
+for j ulong 32
+put tkap_h add mul b 32 j get tkap_h add mul a 32 j
+end
+end
+fn dsclone to void
+old = get ds_ctl 0
+next = xor old 1
+for i ulong 16
+put ds_meta add mul next 16 i get ds_meta add mul old 16 i
+end
+for i ulong 64
+dsclonenode add mul old 64 i add mul next 64 i
+end
+for i ulong 1024
+put ds_sup add mul next 1024 i get ds_sup add mul old 1024 i
+put ds_dis add mul next 1024 i get ds_dis add mul old 1024 i
+end
+for i ulong 8
+put tkap_c add mul next 8 i get tkap_c add mul old 8 i
+end
+for i ulong get tkap_c mul old 8
+dscloneaum add mul old 128 i add mul next 128 i
+end
+dsselect next
+put ds_ctl 5 0
+end
+fn dsleput out edit uchar 65536 p ulong v ulong to void
+for j ulong 8
+put out add p j uchar and shr v mul j 8 255
+end
+end
+fn dsleget src view uchar 65536 p ulong to ulong
+v = ulong 0
+for j ulong 8
+v = or v shl ulong get src add p j mul j 8
+end
+ret v
+end
+fn dsabort to void
+if ne stabort 0
+exit 74
+end
+end
+fn dssave to int
+b = new uchar 65536 0
+dsset 7 tkacget 0
+dsset 15 1
+for i ulong 16
+dsleput b mul i 8 dsget i
+end
+if ne stbegin 0
+dsabort
+ret 1
+end
+if ne stwrite b 128 0
+dsabort
+ret 1
+end
+for i ulong dsget 1
+dsleput b 0 dsid i
+dsleput b 8 get ds_slen dsrow i
+dsleput b 16 get ds_auth dsrow i
+for j ulong 32
+put b add 24 j get ds_key add mul dsrow i 32 j
+put b add 56 j get ds_rot add mul dsrow i 32 j
+end
+if ne stwrite b 88 0
+dsabort
+ret 1
+end
+n = dssig i b
+if ne stwrite b n 0
+dsabort
+ret 1
+end
+end
+for i ulong dsget 3
+put b i get ds_sup add mul get ds_ctl 1 1024 i
+end
+if ne stwrite b dsget 3 0
+dsabort
+ret 1
+end
+for i ulong dsget 4
+put b i get ds_dis add mul get ds_ctl 1 1024 i
+end
+if ne stwrite b dsget 4 0
+dsabort
+ret 1
+end
+for i ulong tkacget 0
+n = tkaget i 0 b
+if ne stwrite b n 0
+dsabort
+ret 1
+end
+end
+s = stcommit
+if eq s 1
+dsabort
+end
+ret s
+end
+fn dsstatekeys idx ulong keys edit uchar 16384 to ulong
+b = new uchar 65536 0
+t = new ulong 131074 0
+n = tkaget idx 1 b
+if gt n 65536
+ret 65537
+end
+n = cbrdec b n t
+r = cbrmfind t 0 3
+j = add r 1
+cnt = ulong 0
+for i ulong cbrval t r
+p = cbrmfind t j 3
+if eq cbrval t p 32
+tkaexport b cbrpoff t p keys mul cnt 32
+cnt = add cnt 1
+end
+j = cbrnext t j
+end
+ret cnt
+end
+fn dsauthsig sig view uchar 65536 n ulong i ulong idx ulong to ulong
+keys = new uchar 16384 0
+node = new uchar 32 0
+t = new ulong 131074 0
+m = new ulong 132 0
+cnt = dsstatekeys idx keys
+if gt cnt 512
+ret 0
+end
+if ne nksdec sig n t m 0
+ret 0
+end
+dskey i node 0
+ret nksauth sig t m node keys cnt
+end
+fn dssamekey i ulong j ulong to ulong
+a = mul dsrow i 32
+b = mul dsrow j 32
+for k ulong 32
+v = get ds_key add a k
+if ne v get ds_key add b k
+ret 0
+end
+end
+ret 1
+end
+fn dsloadnode i ulong to int
+b = new uchar 65536 0
+if ne stread b 88
+ret 1
+end
+id = dsleget b 0
+n = dsleget b 8
+if or eq id 0 gt id 9223372036854775807
+ret 1
+end
+if or gt n 65536 ge dsleget b 16 128
+ret 1
+end
+put ds_ids dsrow i id
+put ds_slen dsrow i n
+put ds_auth dsrow i dsleget b 16
+for j ulong 32
+put ds_key add mul dsrow i 32 j get b add 24 j
+put ds_rot add mul dsrow i 32 j get b add 56 j
+end
+for j ulong i
+if eq dsid j id
+ret 1
+end
+if ne dssamekey i j 0
+ret 1
+end
+end
+if ne n 0
+if ne stread b long n
+ret 1
+end
+dssetsig i b n get ds_auth dsrow i
+end
+ret 0
+end
+fn dsload to int
+b = new uchar 65536 0
+dsselect 0
+tkareset
+if ne stread b 128
+ret 1
+end
+for i ulong 16
+dsset i dsleget b mul i 8
+end
+if or ne dsget 15 1 gt dsget 0 3
+ret 1
+end
+if or gt dsget 1 64 gt dsget 7 128
+ret 1
+end
+if or gt dsget 3 1024 gt dsget 4 1024
+ret 1
+end
+if ne dsget 5 0
+ret 1
+end
+if lt dsget 0 2
+if ne dsget 3 0
+ret 1
+end
+else
+if ne dsget 2 0
+ret 1
+end
+end
+for i ulong 7
+if ne dsget add i 8 0
+ret 1
+end
+end
+if eq dsget 0 0
+if or ne dsget 7 0 ne dsget 2 0
+ret 1
+end
+else
+if eq dsget 7 0
+ret 1
+end
+end
+for i ulong dsget 1
+if ne dsloadnode i 0
+ret 1
+end
+end
+if ne dsget 3 0
+if ne stread b long dsget 3
+ret 1
+end
+for j ulong dsget 3
+put ds_sup j get b j
+end
+end
+if ne dsget 4 0
+if ne stread b long dsget 4
+ret 1
+end
+for j ulong dsget 4
+put ds_dis j get b j
+end
+end
+for i ulong dsget 7
+n = stread b
+if le n 0
+ret 1
+end
+if eq i 0
+if ne tkaboot b ulong n 0
+ret 1
+end
+else
+if ne tkabegin 0
+ret 1
+end
+if ne tkastage b ulong n 0
+ret 1
+end
+if ne tkacommit 0
+ret 1
+end
+end
+end
+if ne stread b 0
+ret 1
+end
+if eq dsget 0 1
+if or ne dsget 7 1 eq dsfind dsget 2 64
+ret 1
+end
+end
+for i ulong dsget 1
+n = dssig i b
+if ne n 0
+if lt dsget 0 2
+ret 1
+end
+if eq dsauthsig b n i get ds_auth dsrow i 0
+ret 1
+end
+end
+end
+if ne dsget 3 0
+for i ulong dsget 3
+put b i get ds_sup i
+end
+if eq dsvalidsecretat b dsget 3 0 0
+ret 1
+end
+end
+if eq dsget 0 3
+for i ulong dsget 4
+put b i get ds_dis i
+end
+if eq dsvalidsecret b dsget 4 0
+ret 1
+end
+else
+if ne dsget 4 0
+ret 1
+end
+end
+put ds_ctl 0 0
+ret 0
+end

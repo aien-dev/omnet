@@ -1,0 +1,27 @@
+{
+  "source": "https://www.rfc-editor.org/rfc/rfc8259 and https://pkg.go.dev/encoding/json; independently authored edge cases, 2026-10-25",
+  "parse": [
+    {"input": "null", "output": "null"},
+    {"input": " {\"a\": [1,true,false,null]} ", "output": "{\"a\":[1,true,false,null]}"},
+    {"input": "\"\\uD834\\uDD1E\"", "output": "\"𝄞\""},
+    {"input": "\"\\ud800\"", "output": "\"�\""},
+    {"input": "\"\\udc00\"", "output": "\"�\""},
+    {"input": "\"\\ud800\\ud800\"", "output": "\"��\""},
+    {"input": "\"<>&\"", "output": "\"\\u003c\\u003e\\u0026\""},
+    {"input": "9007199254740993", "output": "9007199254740993"},
+    {"input": "18446744073709551615", "output": "18446744073709551615"},
+    {"input": "-9223372036854775808", "output": "-9223372036854775808"},
+    {"input": "1e999999999999999999999", "output": "1e999999999999999999999"},
+    {"input": "\"\\u0000\"", "output": "\"\\u0000\""},
+    {"input": "\"\\/\"", "output": "\"/\""},
+    {"input": "{\"x\":1,\"\\u0078\":2}", "output": null},
+    {"input": "{\"x\":1,\"x\":2}", "output": null},
+    {"input": "{\"x\":1,}", "output": null},
+    {"input": "[1,]", "output": null},
+    {"input": "01", "output": null},
+    {"input": "1e+", "output": null},
+    {"input": "true false", "output": null},
+    {"input": "\"\\uD834\\uQQQQ\"", "output": null},
+    {"input": "\"a\nb\"", "output": null}
+  ]
+}

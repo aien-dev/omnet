@@ -1,0 +1,180 @@
+note SPDX-License-Identifier: Apache-2.0
+fn testresult code int to int
+b = new uchar 65536 0
+put b 0 uchar code
+r = write int 1 b ulong 0 ulong 1
+ret 0
+end
+fn testfinish code int to int
+r = stclose
+ret testresult code
+end
+fn testcapacity b edit uchar 65536 mode uchar to int
+if eq mode uchar 85
+if ne stwrite b 65537 1
+ret testfinish 4
+end
+if ne stcommit 1
+ret testfinish 4
+end
+ret testfinish stabort
+end
+count = ulong 512
+size = ulong 65536
+if eq mode uchar 81
+count = ulong 65536
+size = ulong 1
+end
+for i ulong count
+if ne stwrite b size 0
+ret testfinish 4
+end
+end
+if ne mode uchar 71
+if ne stwrite b 1 1
+ret testfinish 4
+end
+if ne stcommit 1
+ret testfinish 4
+end
+ret testfinish stabort
+end
+if ne stcommit 0
+ret testfinish 4
+end
+if ne stload 0
+ret testfinish 4
+end
+for i ulong count
+if ne stread b long size
+ret testfinish 4
+end
+end
+if ne stread b long 0
+ret testfinish 4
+end
+ret testfinish 0
+end
+fn main to int
+p = new uchar 65536 0
+m = new uchar 65536 0
+b = new uchar 65536 0
+n = argread ulong 1 p ulong 0 ulong 65536
+v = argread ulong 2 m ulong 0 ulong 65536
+mode = get m 0
+seed = uchar 17
+if gt argcnt long 3
+v = argread ulong 3 b ulong 0 ulong 65536
+seed = get b 0
+end
+init = int 0
+if eq mode uchar 73
+init = int 1
+end
+if eq mode uchar 69
+init = int 1
+end
+if lt n long 0
+ret testresult 1
+end
+r = stopen p ulong n init
+if ne r 0
+ret testresult r
+end
+if eq init 1
+if ne stpass 64 65 1
+ret testfinish 4
+end
+end
+if eq mode uchar 72
+put b 0 9
+v = write int 1 b ulong 0 ulong 1
+v = read int 0 b ulong 0 ulong 1
+ret testfinish 0
+end
+if eq mode uchar 76
+r = stload
+if ne r 0
+ret testfinish r
+end
+v = stread b
+if ne v long 65536
+ret testfinish 3
+end
+for i ulong 65536
+if ne get b i uchar and add ulong seed i 255
+ret testfinish 3
+end
+end
+v = stread b
+if ne v long 17
+ret testfinish 3
+end
+for i ulong 17
+if ne get b i seed
+ret testfinish 3
+end
+end
+if ne stread b long 0
+ret testfinish 3
+end
+ret testfinish 0
+end
+note TEST_ARM
+r = stbegin
+if ne r 0
+ret testfinish r
+end
+if ne stpass 64 65 1
+ret testfinish 4
+end
+if or eq mode uchar 71 eq mode uchar 67
+ret testcapacity b mode
+end
+if or eq mode uchar 81 eq mode uchar 85
+ret testcapacity b mode
+end
+if ne mode uchar 69
+for i ulong 65536
+put b i uchar and add ulong seed i 255
+end
+r = stwrite b 65536
+if ne r 0
+ret testfinish r
+end
+for i ulong 17
+put b i seed
+end
+r = stwrite b 17
+if ne r 0
+ret testfinish r
+end
+end
+if eq mode uchar 75
+put b 0 9
+v = write int 1 b ulong 0 ulong 1
+v = read int 0 b ulong 0 ulong 1
+ret testfinish 0
+end
+if eq mode uchar 65
+r = stabort
+ret testfinish r
+end
+r = stcommit
+if eq r 2
+note Verify a poisoned store cannot mutate, recover or pretend to abort.
+if ne stbegin 1
+ret testfinish 4
+end
+if ne stload 1
+ret testfinish 4
+end
+if ne stabort 1
+ret testfinish 4
+end
+if ne stpass 64 65 1
+ret testfinish 4
+end
+end
+ret testfinish r
+end

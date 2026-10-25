@@ -1,0 +1,529 @@
+note SPDX-License-Identifier: Apache-2.0
+note Single-threaded program companion. Descriptor cells store fd+1, zero means absent.
+note ctx: dir,lock,writer,reader,poison,init,total,count,readtotal,readcount,writebad,eof.
+note ctx12/13 track first-epoch inheritance copies until exec or shutdown.
+global stctx long 14
+global sthash uchar 64
+
+fn stgethash slot ulong h edit uchar 32 to void
+for i ulong 32
+put h i get sthash add mul slot 32 i
+end
+end
+fn stsethash slot ulong h view uchar 32 to void
+for i ulong 32
+put sthash add mul slot 32 i get h i
+end
+end
+fn stresetread to void
+put stctx 8 0
+put stctx 9 0
+put stctx 11 0
+for i ulong 32
+put sthash add i 32 0
+end
+end
+fn stdrop slot ulong to int
+v = get stctx slot
+put stctx slot 0
+if gt v long 0
+if ne fclose int sub v long 1 long 0
+ret 1
+end
+end
+ret 0
+end
+
+note Reader rejects all damage including trailing data and missing terminator.
+fn stnext fd int out edit uchar 65536 to long
+if ne get stctx 11 long 0
+ret 0
+end
+h = new uchar 65536 0
+d = new uchar 32 0
+p = new uchar 32 0
+q = new uchar 32 0
+if ne streadall fd h 40 0
+ret -1
+end
+n = stget64 h 0
+if eq n 0
+stgethash 1 p
+if ne steqhash h 8 p 0
+ret -1
+end
+if ne streadall fd h 16 0
+ret -1
+end
+if ne stget64 h 0 ulong get stctx 8
+ret -1
+end
+if ne stget64 h 8 ulong get stctx 9
+ret -1
+end
+if ne strd fd h 0 1 long 0
+ret -1
+end
+put stctx 11 1
+ret 0
+end
+if gt n 65536
+ret -1
+end
+if gt add ulong get stctx 8 n 33554432
+ret -1
+end
+if ge get stctx 9 long 65536
+ret -1
+end
+if ne streadall fd out n 0
+ret -1
+end
+sthashdata out n d
+if ne steqhash h 8 d 0
+ret -1
+end
+put stctx 8 add get stctx 8 long n
+put stctx 9 add get stctx 9 long 1
+stgethash 1 p
+stchain p d n ulong get stctx 8 ulong get stctx 9 q
+stsethash 1 q
+ret long n
+end
+
+fn stvalidate fd int to int
+if ne stmeta fd 0 0
+ret 1
+end
+if ne sthead fd 0
+ret 1
+end
+stresetread
+b = new uchar 65536 0
+for i ulong 65537
+r = stnext fd b
+if lt r long 0
+ret 1
+end
+if eq r long 0
+ret 0
+end
+end
+ret 1
+end
+
+fn stread out edit uchar 65536 to long
+if ne get stctx 4 long 0
+ret -1
+end
+if eq get stctx 3 long 0
+ret -1
+end
+r = stnext int sub get stctx 3 long 1 out
+if lt r long 0
+put stctx 4 1
+end
+ret r
+end
+
+fn stload to int
+if eq get stctx 0 long 0
+ret 1
+end
+if ne get stctx 4 long 0
+ret 1
+end
+if ne get stctx 2 long 0
+ret 1
+end
+if ne stdrop 3 0
+ret 1
+end
+name = new uchar 65536 0
+stpath name
+f = fopen name ulong 0 ulong 8 int 559104 int 0
+if lt f long 0
+ret 1
+end
+put stctx 3 add f long 1
+if ne stvalidate int f 0
+r = stdrop 3
+ret 1
+end
+note Re-establish durability before resuming after a possible uncertain prior rename.
+if ne stsync int f long 0
+r = stdrop 3
+ret 1
+end
+if ne stsync int sub get stctx 0 long 1 long 0
+r = stdrop 3
+ret 1
+end
+if ne sthead int f 0
+r = stdrop 3
+ret 1
+end
+stresetread
+ret 0
+end
+
+note O_NOFOLLOW|O_NONBLOCK prevents symlink following and FIFO open blocking.
+fn ststale to int
+name = new uchar 65536 0
+stpath name
+f = fopen name ulong 0 ulong 12 int 559104 int 0
+if eq f long -2
+ret 0
+end
+if lt f long 0
+ret 1
+end
+r = stmeta int f 0
+c = fclose int f
+if ne r 0
+ret 1
+end
+if ne c long 0
+ret 1
+end
+if ne unlink name ulong 0 ulong 12 long 0
+ret 1
+end
+ret 0
+end
+
+fn stlock fd int to int
+a = new uchar 65536 0
+if ne staddr fd a 0
+ret 1
+end
+s = socknew int 1 int 524289 int 0
+if lt s long 0
+ret 1
+end
+if ne bind int s a ulong 0 ulong 34 long 0
+r = fclose int s
+ret 1
+end
+put stctx 1 add s long 1
+ret 0
+end
+
+fn stclose to int
+note All directory references close before either writer-lock reference.
+r = stdrop 3
+r = or r stdrop 2
+r = or r stdrop 12
+r = or r stdrop 0
+r = or r stdrop 13
+r = or r stdrop 1
+put stctx 4 0
+ret r
+end
+
+fn stopen path view uchar 65536 n ulong init int to int
+if ne get stctx 0 long 0
+ret 1
+end
+if eq n 0
+ret 1
+end
+if gt n 4095
+ret 1
+end
+for i ulong n
+if eq get path i uchar 0
+ret 1
+end
+end
+if ne init 0
+if ne init 1
+ret 1
+end
+end
+note ARM64 O_DIRECTORY=16384, O_NOFOLLOW=32768, O_CLOEXEC=524288.
+f = fopen path ulong 0 n int 573440 int 0
+if lt f long 0
+ret 1
+end
+put stctx 0 add f long 1
+put stctx 4 0
+if ne stmeta int f 1 0
+r = stclose
+ret 1
+end
+if ne stlock int f 0
+r = stclose
+ret 1
+end
+if ne fchdir int f long 0
+r = stclose
+ret 1
+end
+put stctx 5 long init
+name = new uchar 65536 0
+stpath name
+if eq init 1
+v = fopen name ulong 0 ulong 8 int 559104 int 0
+if ne v long -2
+if ge v long 0
+r = fclose int v
+end
+r = stclose
+ret 1
+end
+else
+if ne stload 0
+r = stclose
+ret 1
+end
+end
+if ne ststale 0
+r = stclose
+ret 1
+end
+ret 0
+end
+
+fn stbegin to int
+if eq get stctx 0 long 0
+ret 1
+end
+if ne get stctx 4 long 0
+ret 1
+end
+if ne get stctx 2 long 0
+ret 1
+end
+if ne stdrop 3 0
+ret 1
+end
+if ne ststale 0
+ret 1
+end
+name = new uchar 65536 0
+stpath name
+f = fopen name ulong 0 ulong 12 int 559298 int 384
+if lt f long 0
+ret 1
+end
+put stctx 2 add f long 1
+put stctx 10 0
+put stctx 6 0
+put stctx 7 0
+for i ulong 32
+put sthash i 0
+end
+if ne stmeta int f 0 0
+put stctx 10 1
+ret 1
+end
+b = new uchar 65536 0
+stmagic b
+if ne stwriteall int f b 16 0
+put stctx 10 1
+ret 1
+end
+ret 0
+end
+
+fn stwrite b view uchar 65536 n ulong to int
+if eq get stctx 2 long 0
+ret 1
+end
+if ne get stctx 4 long 0
+ret 1
+end
+if ne get stctx 10 long 0
+ret 1
+end
+if eq n 0
+ret 0
+end
+if gt n 65536
+put stctx 10 1
+ret 1
+end
+if gt add ulong get stctx 6 n 33554432
+put stctx 10 1
+ret 1
+end
+if ge get stctx 7 long 65536
+put stctx 10 1
+ret 1
+end
+h = new uchar 65536 0
+d = new uchar 32 0
+p = new uchar 32 0
+q = new uchar 32 0
+sthashdata b n d
+stput64 h 0 n
+for i ulong 32
+put h add i 8 get d i
+end
+f = int sub get stctx 2 long 1
+if ne stwriteall f h 40 0
+put stctx 10 1
+ret 1
+end
+if ne stwriteall f b n 0
+put stctx 10 1
+ret 1
+end
+put stctx 6 add get stctx 6 long n
+put stctx 7 add get stctx 7 long 1
+stgethash 0 p
+stchain p d n ulong get stctx 6 ulong get stctx 7 q
+stsethash 0 q
+ret 0
+end
+
+fn stabort to int
+if ne get stctx 4 long 0
+ret 1
+end
+if eq get stctx 2 long 0
+ret 0
+end
+r = stdrop 2
+if ne ststale 0
+ret 1
+end
+ret r
+end
+
+fn stcommit to int
+if eq get stctx 2 long 0
+ret 1
+end
+if ne get stctx 4 long 0
+ret 1
+end
+if ne get stctx 10 long 0
+ret 1
+end
+f = int sub get stctx 2 long 1
+b = new uchar 65536 0
+for i ulong 32
+put b add i 8 get sthash i
+end
+stput64 b 40 ulong get stctx 6
+stput64 b 48 ulong get stctx 7
+if ne stwriteall f b 56 0
+put stctx 10 1
+ret 1
+end
+note A failed commit cannot be attempted again on the same staged file.
+put stctx 10 1
+if ne stsync f long 0
+ret 1
+end
+if ne stvalidate f 0
+ret 1
+end
+if ne strename long 0
+ret 1
+end
+note No rollback, retry or serving is permitted after an uncertain commit.
+put stctx 4 1
+if ne stsync int sub get stctx 0 long 1 long 0
+ret 2
+end
+if ne stdrop 2 0
+ret 2
+end
+put stctx 4 0
+put stctx 5 0
+ret 0
+end
+
+note First cold-start epoch only. Caller must exec immediately or exit on failure.
+fn stpass dirtgt int locktgt int to int
+if eq get stctx 0 long 0
+ret 1
+end
+if eq get stctx 1 long 0
+ret 1
+end
+if ne get stctx 4 long 0
+ret 1
+end
+if ne get stctx 5 long 0
+ret 1
+end
+if ne get stctx 2 long 0
+ret 1
+end
+if ne get stctx 12 long 0
+ret 1
+end
+if ne get stctx 13 long 0
+ret 1
+end
+if ne get stctx 3 long 0
+if eq get stctx 11 long 0
+ret 1
+end
+end
+if eq dirtgt locktgt
+ret 1
+end
+if ne stunused dirtgt 0
+ret 1
+end
+if ne stunused locktgt 0
+ret 1
+end
+if ne stdrop 3 0
+ret 1
+end
+note Poison while constructing handoff; any partial failure is fail-stop.
+put stctx 4 1
+r = dupfd int sub get stctx 0 long 1 dirtgt int 0
+if ne r long dirtgt
+ret 1
+end
+put stctx 12 add long dirtgt long 1
+r = dupfd int sub get stctx 1 long 1 locktgt int 0
+if ne r long locktgt
+ret 1
+end
+put stctx 13 add long locktgt long 1
+note Keep poisoned after handoff: no new storage work may race the exec boundary.
+ret 0
+end
+
+note Structural adoption only; same-UID/root launcher and trusted procfs are prerequisites.
+fn stresume dirfd int lockfd int to int
+if ne get stctx 0 long 0
+ret 1
+end
+if lt dirfd 3
+ret 1
+end
+if lt lockfd 3
+ret 1
+end
+if eq dirfd lockfd
+ret 1
+end
+if ne stmeta dirfd 1 0
+ret 1
+end
+if ne stlockmeta dirfd lockfd 0
+ret 1
+end
+put stctx 0 add long dirfd long 1
+put stctx 1 add long lockfd long 1
+put stctx 4 0
+put stctx 5 0
+if ne fchdir dirfd long 0
+r = stclose
+ret 1
+end
+if ne stload 0
+r = stclose
+ret 1
+end
+ret 0
+end
