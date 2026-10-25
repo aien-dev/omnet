@@ -36,13 +36,18 @@ run() {
 	fi
 }
 
-# mutant BINARY FILE LABEL: the driver must report a mismatch (exit 1)
+# mutant BINARY FILE LABEL: the driver must finish normally and report a mismatch: exit status
+# exactly 1, at least one MISMATCH line, and its summary line. Any other outcome (0, 65 bad
+# input, 100+N trap, a signal) fails the run, so a mutant that crashes is not counted as detected.
 mutant() {
-	if "$1" < "$2" > "$out/$3.log" 2>&1; then
-		echo "FAIL $3: mutant not detected: $(tail -n 1 "$out/$3.log")"
-		fail=1
+	rc=0
+	"$1" < "$2" > "$out/$3.log" 2>&1 || rc=$?
+	nm=$(grep -c '^MISMATCH ' "$out/$3.log" || true)
+	if [ "$rc" -eq 1 ] && [ "$nm" -gt 0 ] && grep -q '^cases .* mismatches [1-9]' "$out/$3.log"; then
+		echo "PASS $3 detected: $nm mismatches, $(tail -n 1 "$out/$3.log")"
 	else
-		echo "PASS $3 detected: $(grep -c MISMATCH "$out/$3.log") mismatches, $(tail -n 1 "$out/$3.log")"
+		echo "FAIL $3: exit $rc, $nm MISMATCH lines (need exit 1 and at least one): $(tail -n 1 "$out/$3.log")"
+		fail=1
 	fi
 }
 

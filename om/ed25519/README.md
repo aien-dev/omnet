@@ -138,6 +138,12 @@ following:
    - an expected result flipped;
    - one limb of the constant 2d changed;
    - the consensus cofactor multiplication deleted.
+
+   A mutant counts as detected only when the driver exits with status exactly 1 and prints at
+   least one `MISMATCH` line. Any other outcome (exit 0, 65 for bad input, 100+N for a trap, or a
+   signal) fails the run, so a mutant that crashes is not mistaken for one that was caught. This
+   was checked by temporarily swapping in a mutant that traps 11 on every call: `run.sh` reported
+   `FAIL mutant-d2-rfc8032: exit 111, 0 MISMATCH lines` and ended with `ed25519: FAIL`.
 3. When python3 has pynacl and cryptography, generates and runs the differential corpus.
    Otherwise it prints a NOTE and skips it.
 4. Times one series.
@@ -175,16 +181,37 @@ Notes on the Wycheproof and edge vectors:
 
   Go strict accepts 22 of them and consensus accepts 200.
 
-`gen/vectors.py SRC ORACLE OUT` regenerates the four files from the pinned upstream files and the
-referee in `gen/oracle/`. The referee is a 44-line Go program that calls `crypto/ed25519.Verify`
-and `ed25519consensus.Verify`, built with Go 1.26.0, module `ed25519consensus` v0.2.0. Go and
-Python are test referees and generators only. Neither builds nor implements anything in
-`ed25519.om`, and `run.sh` needs neither for the static vectors.
+`gen/vectors.py SRC ORACLE OUT` regenerates the four files and the third-party notices from the
+pinned upstream files and the referee in `gen/oracle/`. The referee is a 44-line Go program that
+calls `crypto/ed25519.Verify` and `ed25519consensus.Verify`, built with Go 1.26.0, module
+`ed25519consensus` v0.2.0. Go and Python are test referees and generators only. Neither builds
+nor implements anything in `ed25519.om`, and `run.sh` needs neither for the static vectors.
 
 `gen/diff.py OUT COUNT SEED` writes the differential corpus. Each keypair has a random message of
 0..4096 bytes, signed by pynacl 1.5.0 (even index) or cryptography 41.0.7 (odd index). The
 signature is expected valid in both modes. A copy with one random bit of pk || sig || msg flipped
 is expected invalid in both modes.
+
+### Third-party material and notices
+
+| copied material | owner and license | notice file |
+|---|---|---|
+| key/signature hex in `vectors/zip215.txt`, from ed25519consensus `zip215_test.go` | Copyright 2016 Henry de Valence (file header); upstream LICENSE: Copyright (c) 2009 The Go Authors, Copyright (c) 2020 Henry de Valence; BSD 3-clause | `vectors/zip215.LICENSE`, the upstream LICENSE at 15731de4, verbatim (sha256 `789be8b2…6bc7`) |
+| test data in `vectors/wycheproof.txt`, converted from `ed25519_test.json` (modified: JSON to line format, tests with signatures that are not 64 bytes left out) | Copyright 2016-2026 The Wycheproof Authors; Apache License 2.0 (no NOTICE file upstream) | `vectors/wycheproof.LICENSE`, the upstream LICENSE at a3d5d142, verbatim (sha256 `58d1e17f…d8bd`) |
+| keys, messages and signatures in `vectors/rfc8032.txt`, from RFC 8032 section 7.1 | Copyright (c) 2017 IETF Trust and the document authors; IRTF stream, under BCP 78 and the IETF Trust Legal Provisions | `vectors/rfc8032.NOTICE`, the RFC's Copyright Notice section, verbatim |
+
+Each vector file's header names its notice file. `vectors.py` copies the two LICENSE files from
+SRC and cuts the RFC notice from the RFC text, so regeneration keeps them.
+
+The RFC 8032 boilerplate has no Code Components clause (it is an IRTF-stream document). I have not
+determined whether test vectors in it count as code components under the Trust Legal Provisions.
+The notice is included as attribution; whether it is sufficient is not checked.
+
+Not copied: `edge.txt` and the differential corpus come from this unit's own generators. In
+`ed25519.om`, the field layout, the `modL` reduction and the add/double formulas follow the
+published algorithms of TweetNaCl, and the inversion addition chain follows ref10. Both are
+public-domain releases. The Omega code was written for this unit and contains no copied source
+text. Go's source is cited by line numbers only.
 
 ### Evidence (2026-10-25, Linux arm64 host)
 
@@ -206,8 +233,8 @@ PASS mutant-d2-rfc8032 detected: 10 mismatches
 PASS mutant-cofactor-zip215 detected: 157 mismatches
 diff: 2000 keypairs, 4000 cases, 5 files, seed 1
 PASS diff-00 .. diff-04: 800 cases, 1600 verifies, 0 mismatches each (8000 verifies)
-TIME strict: 1000 verifies, 1064878191 ns total, 1064878 ns per verify
-TIME consensus: 1000 verifies, 1076570390 ns total, 1076570 ns per verify
+TIME strict: 1000 verifies, 1063530420 ns total, 1063530 ns per verify
+TIME consensus: 1000 verifies, 1073996973 ns total, 1073996 ns per verify
 ```
 
 The timing figure is one series of N = 1000 per mode on RFC 8032 TEST 1 (empty message), measured
