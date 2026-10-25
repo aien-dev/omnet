@@ -1,0 +1,228 @@
+note SPDX-License-Identifier: Apache-2.0
+fn dsunpend to void
+if eq dsget 0 1
+dsset 0 0
+dsset 2 0
+tkareset
+end
+end
+fn dskeyput k view uchar 32 i ulong to void
+if eq dsnodematch k i 0
+put ds_slen dsrow i 0
+put ds_auth dsrow i 0
+end
+p = mul dsrow i 32
+for j ulong 32
+put ds_key add p j get k j
+end
+end
+fn dsrotput b view uchar 65536 i ulong to void
+p = mul dsrow i 32
+for j ulong 32
+put ds_rot add p j get b j
+end
+end
+fn dsregister t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+id = dsnumber t d dsfield t d 12
+if or eq id 0 gt id 9223372036854775807
+ret 400
+end
+i = dsfind id
+if eq i 64
+if eq dsget 1 64
+ret 409
+end
+i = dsget 1
+dsset 1 add i 1
+put ds_slen dsrow i 0
+put ds_auth dsrow i 0
+end
+k = new uchar 32 0
+if eq dsnode t d dsfield t d 1 k 0
+ret 400
+end
+for j ulong dsget 1
+if ne j i
+if ne dsnodematch k j 0
+ret 409
+end
+end
+end
+dskeyput k i
+b = new uchar 65536 0
+n = dsbytes t d dsfield t d 13 b
+if ne n 32
+ret 400
+end
+dsrotput b i
+put ds_ids dsrow i id
+r = dsfield t d 10
+if ne r 0
+n = dsbytes t d r b
+if gt n 65536
+ret 400
+end
+if ne n 0
+if ne dsget 0 2
+ret 409
+end
+if eq dsauthsig b n i tkacget 1 0
+ret 403
+end
+end
+dssetsig i b n tkacget 1
+end
+dsunpend
+put ds_ctl 6 dslit out 0 0
+put ds_ctl 5 1
+ret 200
+end
+fn dsremove t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+i = dsfind dsnumber t d dsfield t d 12
+if eq i 64
+ret 404
+end
+last = sub dsget 1 1
+if ne i last
+dsclonenode dsrow last dsrow i
+end
+put ds_slen dsrow last 0
+dsset 1 last
+dsunpend
+put ds_ctl 6 dslit out 0 0
+put ds_ctl 5 1
+ret 200
+end
+fn dsmap out edit uchar 65536 to int
+p = dslit out 0 14
+if lt dsget 0 2
+p = dslit out p 15
+else
+if eq dsget 0 3
+p = dslit out p 16
+else
+p = dslit out p 10
+p = dsputhead out p
+p = dslit out p 5
+end
+end
+p = dslit out p 19
+p = jsonu64 out p dsget 6
+p = dslit out p 17
+b = new uchar 65536 0
+for i ulong dsget 1
+if ne i 0
+p = dslit out p 6
+end
+p = dslit out p 2
+p = jsonu64 out p dsid i
+p = dslit out p 3
+p = dsputnode out p i
+p = dslit out p 18
+n = dssig i b
+if eq n 0
+p = dslit out p 15
+else
+p = dsput64 out p b n
+end
+p = dslit out p 5
+end
+put ds_ctl 6 dslit out p 7
+ret 200
+end
+fn dsroute t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+r = get ds_ctl 4
+if eq r 1
+ret dsbegin t d out
+end
+if eq r 2
+ret dsfinish t d out
+end
+if eq r 3
+ret dsbootstrap t d out
+end
+if eq r 4
+ret dsoffer t d out
+end
+if eq r 5
+ret dssend t d out
+end
+if eq r 6
+ret dsdisable t d out
+end
+if eq r 7
+ret dssign t d out
+end
+if eq r 8
+ret dsaffected t d out
+end
+if eq r 9
+ret dsregister t d out
+end
+if eq r 10
+ret dsremove t d out
+end
+if eq r 11
+ret dsmap out
+end
+ret 404
+end
+fn dsmutating to ulong
+r = get ds_ctl 4
+if or eq r 1 eq r 2
+ret 1
+end
+if or eq r 5 eq r 6
+ret 1
+end
+if or eq r 7 eq r 9
+ret 1
+end
+if eq r 10
+ret 1
+end
+ret 0
+end
+fn dsrequest raw view uchar 65536 n ulong out edit uchar 65536 to int
+t = new ulong 32768 0
+d = new uchar 65536 0
+if ne jsonparse raw n t d 0
+put ds_ctl 6 dslit out 0 20
+ret 400
+end
+dsselect get ds_ctl 0
+z = dscommon t d
+if ne z 200
+put ds_ctl 6 dslit out 0 20
+ret z
+end
+put ds_ctl 5 0
+if ne dsmutating 0
+dsclone
+end
+z = dsroute t d out
+if and eq z 200 gt get ds_ctl 6 65536
+z = 413
+end
+if and eq z 200 ne get ds_ctl 5 0
+if eq dsget 6 18446744073709551615
+z = 409
+else
+dsset 6 add dsget 6 1
+s = dssave
+if eq s 2
+exit 74
+end
+if ne s 0
+z = 503
+else
+put ds_ctl 0 get ds_ctl 1
+end
+end
+end
+dsselect get ds_ctl 0
+if ne z 200
+put ds_ctl 6 dslit out 0 20
+end
+ret z
+end

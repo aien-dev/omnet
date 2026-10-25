@@ -1,0 +1,134 @@
+note SPDX-License-Identifier: Apache-2.0
+text ds_sock "tkad.sock"
+fn dsio fd int b edit uchar 65536 n ulong output ulong to int
+p = ulong 0
+deadline = add monons 3000000000
+r = long 0
+while lt p n bound 65537
+left = sub deadline monons
+if le left 0
+ret 1
+end
+if eq output 0
+r = waitio fd 1 left
+else
+r = waitio fd 4 left
+end
+if lt r 0
+if eq r -4
+continue
+end
+ret 1
+end
+if eq r 0
+ret 1
+end
+if eq output 0
+r = recv fd b p sub n p int 0
+else
+r = send fd b p sub n p int 0
+end
+if or eq r -11 eq r -4
+continue
+end
+if le r 0
+ret 1
+end
+p = add p ulong r
+end
+ret 0
+end
+fn dsclient fd int to void
+h = new uchar 65536 0
+b = new uchar 65536 0
+o = new uchar 65536 0
+if ne dsio fd h 20 0 0
+ret
+end
+if or ne get h 0 84 ne get h 1 75
+ret
+end
+if or ne get h 2 65 ne get h 3 1
+ret
+end
+if gt get h 5 1
+ret
+end
+if or ne get h 6 0 ne get h 7 0
+ret
+end
+n = ulong 0
+for i ulong 4
+n = or n shl ulong get h add i 16 mul i 8
+end
+if gt n 65536
+ret
+end
+put ds_ctl 4 ulong get h 4
+put ds_ctl 3 ulong get h 5
+put ds_ctl 2 dsleget h 8
+if ne dsio fd b n 0 0
+ret
+end
+z = dsrequest b n o
+put h 4 uchar and z 255
+put h 5 uchar shr z 8
+put h 6 0
+put h 7 0
+n = get ds_ctl 6
+for i ulong 4
+put h add i 8 uchar and shr n mul i 8 255
+end
+if ne dsio fd h 12 1 0
+ret
+end
+z = dsio fd o n 1
+end
+fn dslisten to int
+z = unlink ds_sock 0 len ds_sock
+if and ne z 0 ne z -2
+ret -1
+end
+addr = new uchar 128 0
+put addr 0 1
+for i ulong len ds_sock
+put addr add i 2 get ds_sock i
+end
+fd = socknew int 1 int 526337 int 0
+if lt fd 0
+ret -1
+end
+if ne bind int fd addr 0 add len ds_sock 3 0
+z = fclose int fd
+ret -1
+end
+if ne chmod ds_sock 0 len ds_sock int 384 0
+z = fclose int fd
+ret -1
+end
+if ne listen int fd int 32 0
+z = fclose int fd
+ret -1
+end
+ret int fd
+end
+fn dsbatch fd int to void
+for i ulong 100000
+r = waitio fd int 1 long -1
+if lt r 0
+if eq r -4
+continue
+end
+exit 75
+end
+client = accept fd int 526336
+if lt client 0
+if or eq client -11 eq client -4
+continue
+end
+exit 75
+end
+dsclient int client
+z = fclose int client
+end
+end

@@ -1,0 +1,217 @@
+note SPDX-License-Identifier: Apache-2.0
+note Linux ARM64 descriptor and snapshot framing helpers; include blake2s.om first.
+fn stget64 b view uchar 65536 p ulong to ulong
+v = ulong 0
+for i ulong 8
+v = or v shl ulong get b add p i mul i 8
+end
+ret v
+end
+
+fn stput64 b edit uchar 65536 p ulong v ulong to void
+for i ulong 8
+put b add p i uchar and shr v mul i 8 255
+end
+end
+
+fn stpath b edit uchar 65536 to void
+note Fixed ASCII snapshot.tmp; use its first eight bytes for snapshot.
+stput64 b 0 8390039475830484595
+stput64 b 8 1886221358
+end
+
+fn staddr fd int a edit uchar 65536 to int
+b = new uchar 65536 0
+if ne fstat fd b ulong 0 ulong 128 long 0
+ret 1
+end
+put a 0 1
+put a 1 0
+put a 2 0
+note sockaddr_un: fixed abstract prefix omnet.store.v1. then binary device/inode.
+stput64 a 3 8391101608174185839
+stput64 a 11 13002232582992495
+stput64 a 18 stget64 b 0
+stput64 a 26 stget64 b 8
+ret 0
+end
+
+fn stunused fd int to int
+if lt fd 3
+ret 1
+end
+b = new uchar 65536 0
+if ne fstat fd b ulong 0 ulong 128 long -9
+ret 1
+end
+ret 0
+end
+
+fn stlockmeta dirfd int lockfd int to int
+b = new uchar 65536 0
+a = new uchar 65536 0
+if ne fstat lockfd b ulong 0 ulong 128 long 0
+ret 1
+end
+if ne and stget64 b 16 61440 ulong 49152
+ret 1
+end
+if ne and stget64 b 24 4294967295 ulong geteuid
+ret 1
+end
+if ne staddr dirfd a 0
+ret 1
+end
+if ne sockname lockfd b ulong 0 ulong 65536 long 34
+ret 1
+end
+for i ulong 34
+if ne get a i get b i
+ret 1
+end
+end
+ret 0
+end
+
+note Thin native boundaries deliberately have no production fault-injection switch.
+fn stwr fd int b view uchar 65536 off ulong n ulong to long
+ret write fd b off n
+end
+fn strd fd int b edit uchar 65536 off ulong n ulong to long
+ret read fd b off n
+end
+fn stsync fd int to long
+ret fsync fd
+end
+fn strename to long
+p = new uchar 65536 0
+put p 0 2
+put p 2 12
+a = new uchar 65536 0
+stpath a
+for i ulong 12
+put p add i 4 get a i
+end
+put p 16 8
+for i ulong 8
+put p add i 18 get a i
+end
+ret renames p ulong 0 ulong 26 int 0
+end
+
+fn stwriteall fd int b view uchar 65536 n ulong to int
+p = ulong 0
+for attempt ulong 131072
+if eq p n
+ret 0
+end
+r = stwr fd b p sub n p
+if eq r long -4
+r = long 0
+else
+if le r long 0
+ret 1
+end
+p = add p ulong r
+end
+end
+ret 1
+end
+fn streadall fd int b edit uchar 65536 n ulong to int
+p = ulong 0
+for attempt ulong 131072
+if eq p n
+ret 0
+end
+r = strd fd b p sub n p
+if eq r long -4
+r = long 0
+else
+if le r long 0
+ret 1
+end
+p = add p ulong r
+end
+end
+ret 1
+end
+
+note fstat ARM64 mode16,nlink20,uid24,size48; reject special bits and hard links.
+fn stmeta fd int isdir int to int
+b = new uchar 65536 0
+if ne fstat fd b ulong 0 ulong 128 long 0
+ret 1
+end
+m = and stget64 b 16 4294967295
+u = and stget64 b 24 4294967295
+if ne u ulong geteuid
+ret 1
+end
+if eq isdir 1
+if ne m ulong 16832
+ret 1
+end
+else
+if ne m ulong 33152
+ret 1
+end
+if ne and shr stget64 b 16 32 4294967295 ulong 1
+ret 1
+end
+if gt stget64 b 48 ulong 36175944
+ret 1
+end
+end
+ret 0
+end
+
+note Digest chaining commits order, frame lengths, cumulative bytes and frame count.
+fn stchain prev view uchar 32 hash view uchar 32 n ulong total ulong count ulong out edit uchar 32 to void
+b = new uchar 65536 0
+k = new uchar 32 0
+for i ulong 32
+put b i get prev i
+put b add i 32 get hash i
+end
+stput64 b 64 n
+stput64 b 72 total
+stput64 b 80 count
+b2shash b 88 k 0 32 out
+end
+fn sthashdata b view uchar 65536 n ulong out edit uchar 32 to void
+k = new uchar 32 0
+b2shash b n k 0 32 out
+end
+fn steqhash b view uchar 65536 off ulong h view uchar 32 to int
+v = ulong 0
+for i ulong 32
+v = or v ulong xor get b add off i get h i
+end
+if ne v 0
+ret 1
+end
+ret 0
+end
+
+fn stmagic b edit uchar 65536 to void
+note Exact 16 ASCII bytes OMNETSNAP0000001.
+stput64 b 0 4705790282053864783
+stput64 b 8 3544385890265608272
+end
+fn sthead fd int to int
+b = new uchar 65536 0
+m = new uchar 65536 0
+stmagic m
+if ne fseek fd long 0 int 0 long 0
+ret 1
+end
+if ne streadall fd b 16 0
+ret 1
+end
+for i ulong 16
+if ne get b i get m i
+ret 1
+end
+end
+ret 0
+end
