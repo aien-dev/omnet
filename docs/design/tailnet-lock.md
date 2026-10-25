@@ -1,6 +1,6 @@
 # Tailnet Lock for self-hosted control servers
 
-Status: bounded local Omega daemon, durable snapshots, JSON RPCs and TKA authority implemented. Headscale integration remains pending. See [Plan and status](#plan-and-status).
+Status: bounded Omega daemon and pinned Headscale adapter implemented; isolated stock-client control-plane lifecycle verified. Not deployed or production-qualified. See [Plan and status](#plan-and-status).
 
 ## Problem
 
@@ -164,7 +164,7 @@ that way. That is a client issue outside this project; tkad's error bodies are s
 | JSON (`om/json`) and eight RPC handlers (`cmd/tkad`) | Omega | implemented: bounded parsing, trusted adapter identity binding |
 | Snapshot storage (`om/store`) | Omega | implemented: descriptor validation, writer exclusion, atomic publication, recovery |
 | tkad service (`cmd/tkad`) | Omega | implemented: private Unix socket, registry/map commands, controlled self-exec |
-| headscale glue | Go (fork) | planned |
+| headscale glue | Go (pinned patch) | implemented and exercised with unmodified Tailscale v1.102.0 |
 
 ## Verification plan
 
@@ -219,6 +219,46 @@ The compiler pin was unchanged. New results:
 These checks do not establish filesystem power-loss durability, cross-namespace writer exclusion,
 stock-client compatibility beyond the tested profile, or production deployment security.
 
+### Stage-five verification
+
+Headscale v0.29.6 (`a2b1d7863926834e94479dcdd91ab344a9356bd0`) plus the committed
+adapter patch passed the isolated stock Tailscale v1.102.0 lifecycle:
+
+- Initialize and sign the initial roster; filter a newly registered unsigned peer.
+- Sign that peer and propagate signature-only updates.
+- Rotate its node key through real interactive Headscale authentication; reject signing
+  the retired key. The pending rotation does not change the committed identity.
+- Remove its signing authority, observe peer rejection, and re-sign under the surviving
+  authority. Both peer and self signatures must refresh without unrelated metadata changes.
+- Restart daemon, controller and clients; retain authority, signatures and removed-key state.
+- Reject a non-owner disable request even with a valid secret.
+- Stop the isolated daemon; reject signing, disablement and fresh registration without
+  disabling protection. Restart it; rejected mutations remain unapplied.
+- Disable and restart every component; unsigned peers become visible and disablement persists.
+
+The run reported 13 PASS records including the artifact-provenance check. It uses a fresh
+network/PID namespace, loopback and a dummy link with no egress. On the verification host,
+unprivileged user namespaces were denied; the explicit `--sudo-netns` launcher creates
+the namespace and drops UID/GID privileges before running any daemon. No live services,
+interfaces, tailnet state or SSH configuration are used.
+
+All twelve Omega suites passed; the later interactive-sync correction passed the daemon suite
+with 279 socket assertions plus failure/recovery checks. The correction checks interactive
+Head against pre-update state, matching stock `TailnetLockModify`.
+Headscale control/state/mapper/types suites and SQLite migration tests passed after review
+fixes. The final self-signature propagation fix additionally passed upstream self-deduplication
+regressions and the full stock-client lifecycle. Rebuilding the final patch from a fresh clone
+produced the identical controller SHA-256:
+`7e6eeb414dc6fd439425b56c4672e2898f71b667b6528f36a75154d3ce27b138`.
+
+The adapter keeps rejected registration signatures from poisoning unrelated nodes, retains
+upstream interactive authentication, rejects duplicate/zero identities before persistence,
+and freezes coherent map frames before releasing its publication lock for network writes.
+Omega remains the only accepted-signature and authority implementation. The local adapter
+still shares the daemon UID. Its durable revision floor is not authenticated rollback protection.
+These checks prove control-plane behavior, not packet delivery, power-loss durability,
+constant-time cryptography, or production security.
+
 ## Plan and status
 
 1. Crypto primitives: BLAKE2s, SHA-512, Ed25519. **Done.**
@@ -227,6 +267,7 @@ stock-client compatibility beyond the tested profile, or production deployment s
    Cross-unit smoke checks node authorization before and after a signed authority-key removal.
 4. tkad service, storage, JSON. **Implemented for the bounded same-UID local-adapter profile.**
    See [`cmd/tkad/README.md`](../../cmd/tkad/README.md) for invocation, framing, limits and tests.
-5. headscale glue and end-to-end tests with stock clients.
-6. Review by a second implementer before any production use. Until then this is pre-alpha and does
-   not protect a tailnet.
+5. Headscale glue and end-to-end tests with stock clients. **Implemented and verified in isolation.**
+   See [`integration/headscale/README.md`](../../integration/headscale/README.md) for reproduction.
+6. Independent production-readiness review and deployment planning remain. Source reviews found
+   and drove fixes during stage five, but are not a production audit. No live deployment is implied.
