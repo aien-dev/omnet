@@ -90,3 +90,32 @@ instruction-latency, OS-scheduling or physical-secrecy claim is made.
 
 Independent source review found the production changes correct. That review is not
 policy approval, remote authentication, complete native secrecy or deployment approval.
+
+## Final clean-checkout replay
+
+`clean-service-replay.json` binds consumer `6e0fff2` (candidate source
+`b65bf2f8…`, binary `e2770128…`) and the independently pinned base `1e075776`
+(source `5a85c0e6…`, binary `c0869a7f…`), compiler `734f0a39…`, contract
+`ced61dec…`. From fresh worktrees:
+
+- `tools/test.sh` exit0: all library suites, `--consumer-units` (type refusals
+  compile7, four production mutants normal exit1 at named markers) and224 real
+  socket assertions. NOT_RUN: random Argon2 oracle corpus, CBOR oracle
+  regeneration. SKIP: foreign-UID chown fixtures (non-root runner).
+- Default socket mode from the base checkout against the candidate: exit0,
+  including restart, short-write, ENOSPC, post-rename uncertainty (74), wrong-count
+  control (41/202) and checksum-valid support-secret omission (41/243).
+- `--candidate-faults` with the candidate hashes: exit0, same fault arms bound to
+  candidate-derived executables.
+- Canonical no-op replay: base Revision5→6, candidate5→5 (A9 suppression).
+
+Matched route p50 (two batches): map ~0.27–0.30 ms both arms; canonical replay
+8.0–8.4 ms base versus0.63–0.67 ms candidate because the rewrite is removed. VmHWM
+23,512 vs23,516 KiB. Baseline ran before candidate on a shared host: regression
+evidence only, no SLA or timing-secrecy claim. All11 persisted snapshots are kept
+as base64 with SHA-256.
+
+`clean-scanner-replay.json` rebinds the bounded function-mode scans to the final
+source: `dseqhash` 96 bytes PASS, `ssfirstbyte` NOT_RUN (one DATA branch), list
+match plus CBOR dependency NOT_RUN for both the candidate and the early-list
+control. No whole function occurs byte-for-byte in the daemon; L6/L7 stay BLOCKED.
