@@ -717,10 +717,10 @@ index 293e6ba..2f43e70 100644
  		}
 diff --git a/hscontrol/state/tka.go b/hscontrol/state/tka.go
 new file mode 100644
-index 0000000..0c2454a
+index 0000000..898446b
 --- /dev/null
 +++ b/hscontrol/state/tka.go
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,166 @@
 +package state
 +
 +import (
@@ -753,6 +753,44 @@ index 0000000..0c2454a
 +	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 +	defer cancel()
 +	return s.TKAReconcile(ctx, id, signature)
++}
++
++// TKAAdmission resolves a Noise identity against committed SQL rows without
++// taking TKAMu, so unregistered clients cannot queue on the publication
++// barrier. The barrier repeats the authoritative lookup; this only rejects
++// identities the registry source does not have.
++func (s *State) TKAAdmission(ctx context.Context, machine key.MachinePublic, nodeKey key.NodePublic) (types.NodeID, bool, error) {
++	var ids []types.NodeID
++	err := s.db.DB.WithContext(ctx).Model(&types.Node{}).
++		Where("node_key = ? AND machine_key = ?", nodeKey.String(), machine.String()).
++		Limit(1).Pluck("id", &ids).Error
++	if err != nil {
++		return 0, false, err
++	}
++	if len(ids) == 0 {
++		return 0, false, nil
++	}
++	return ids[0], true, nil
++}
++
++// TKAAdapterInstalled reports whether this database already depends on the
++// adapter: a recorded checkpoint or any node carrying a tailnet-lock key.
++// Startup must not silently fall back to stock maps once that is true.
++func (s *State) TKAAdapterInstalled(ctx context.Context) (bool, error) {
++	var checkpoints int64
++	if err := s.db.DB.WithContext(ctx).Model(&types.OmnetCheckpoint{}).Count(&checkpoints).Error; err != nil {
++		return false, err
++	}
++	if checkpoints > 0 {
++		return true, nil
++	}
++	var nodes int64
++	err := s.db.DB.WithContext(ctx).Model(&types.Node{}).
++		Where("tka_key IS NOT NULL").Count(&nodes).Error
++	if err != nil {
++		return false, err
++	}
++	return nodes > 0, nil
 +}
 +
 +// TKACheckRevision records the latest observed transport revision under TKAMu.
@@ -1140,10 +1178,10 @@ index 0000000..d952634
 +}
 diff --git a/hscontrol/tkad.go b/hscontrol/tkad.go
 new file mode 100644
-index 0000000..307282f
+index 0000000..0592956
 --- /dev/null
 +++ b/hscontrol/tkad.go
-@@ -0,0 +1,617 @@
+@@ -0,0 +1,680 @@
 +package hscontrol
 +
 +import (
@@ -1178,21 +1216,46 @@ index 0000000..307282f
 +const tkaSignatureLimit = (tkaBodyLimit - 512) / 4 * 3
 +const tkaTimeout = 8 * time.Second
 +
++// Unauthenticated Noise clients reach these paths before any identity check, so
++// the number of request goroutines waiting for the publication barrier is
++// bounded: a caller that cannot take a slot is told to retry instead of
++// queueing behind shared persistence work.
++const (
++	tkaRegisterSlots = 4
++	tkaMapSlots      = 32
++)
++
 +var errTKAUnavailable = errors.New("omnet authority unavailable or registration pending")
++var errTKABusy = errors.New("omnet publication busy; retry")
 +
 +// This is transport glue. Omega alone parses TKA RPCs, verifies signatures,
 +// chooses authority state and decides enablement/disablement. The local socket
 +// profile trusts the same UID; it is not a separate-UID security boundary.
 +type tkaAdapter struct {
-+	h            *Headscale
-+	socket       string
-+	owner        uint64
-+	revision     uint64 // accessed under State.TKAMu
-+	haveRevision bool
-+	healthMu     sync.Mutex
-+	failed       chan struct{}
-+	healthy      bool
++	h             *Headscale
++	socket        string
++	owner         uint64
++	revision      uint64 // accessed under State.TKAMu
++	haveRevision  bool
++	healthMu      sync.Mutex
++	failed        chan struct{}
++	healthy       bool
++	registerSlots chan struct{}
++	mapSlots      chan struct{}
 +}
++
++// admit takes an admission slot without waiting. Slots bound pre-barrier work;
++// they are not a rate limit and do not order publication.
++func admit(slots chan struct{}) bool {
++	select {
++	case slots <- struct{}{}:
++		return true
++	default:
++		return false
++	}
++}
++
++func release(slots chan struct{}) { <-slots }
 +
 +type tkaRegistryNode struct {
 +	NodeID         types.NodeID
@@ -1210,13 +1273,31 @@ index 0000000..307282f
 +func (h *Headscale) initTKA() error {
 +	socket, ownerText := os.Getenv("OMNET_TKAD_SOCKET"), os.Getenv("OMNET_TKAD_ADMIN_USER_ID")
 +	if socket == "" && ownerText == "" {
++		// A database that already used the adapter must not start in stock
++		// mode: maps would carry nil TKAInfo and no signatures, which clients
++		// with Tailnet Lock enabled cannot recover from without local disable.
++		used, err := h.state.TKAAdapterInstalled(context.Background())
++		if err != nil {
++			return fmt.Errorf("omnet adapter state unreadable: %w", err)
++		}
++		if used {
++			return errors.New("omnet adapter state exists; OMNET_TKAD_SOCKET and OMNET_TKAD_ADMIN_USER_ID are required")
++		}
 +		return nil
 +	}
 +	owner, err := strconv.ParseUint(ownerText, 10, 64)
 +	if err != nil || owner == 0 || !filepath.IsAbs(socket) {
 +		return errors.New("OMNET_TKAD_SOCKET must be absolute and OMNET_TKAD_ADMIN_USER_ID must be positive")
 +	}
-+	a := &tkaAdapter{h: h, socket: socket, owner: owner, failed: make(chan struct{}), healthy: true}
++	a := &tkaAdapter{
++		h:             h,
++		socket:        socket,
++		owner:         owner,
++		failed:        make(chan struct{}),
++		healthy:       true,
++		registerSlots: make(chan struct{}, tkaRegisterSlots),
++		mapSlots:      make(chan struct{}, tkaMapSlots),
++	}
 +	h.tkad = a
 +	h.state.TKAReconcile = a.reconcileRegistration
 +	h.state.TKAMu.Lock()
@@ -1523,6 +1604,15 @@ index 0000000..307282f
 +		http.Error(w, "invalid omnet identity", http.StatusBadRequest)
 +		return
 +	}
++	// An unregistered Noise identity must not reach shared persistence work:
++	// committed SQL is the registry source, and the barrier repeats this check.
++	if _, ok, err := a.h.state.TKAAdmission(req.Context(), ns.machineKey, selector.NodeKey); err != nil {
++		http.Error(w, errTKAUnavailable.Error(), http.StatusServiceUnavailable)
++		return
++	} else if !ok {
++		http.Error(w, "unauthorized omnet identity", http.StatusUnauthorized)
++		return
++	}
 +	status, reply, err := func() (int, []byte, error) {
 +		a.h.state.TKAMu.Lock()
 +		defer a.h.state.TKAMu.Unlock()
@@ -1582,6 +1672,13 @@ index 0000000..307282f
 +	if err := ctx.Err(); err != nil {
 +		return nil, err
 +	}
++	// Registration is reachable with an unknown machine key. Bound how many
++	// such requests can wait for the shared barrier; clients retry instead of
++	// queueing behind persistence work.
++	if !admit(h.tkad.registerSlots) {
++		return nil, errTKABusy
++	}
++	defer release(h.tkad.registerSlots)
 +	h.state.TKAMu.Lock()
 +	defer h.state.TKAMu.Unlock()
 +	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tkaTimeout)
@@ -1616,6 +1713,10 @@ index 0000000..307282f
 +	if h.tkad == nil {
 +		return nil
 +	}
++	if !admit(h.tkad.mapSlots) {
++		return errTKABusy
++	}
++	defer release(h.tkad.mapSlots)
 +	h.state.TKAMu.Lock()
 +	defer h.state.TKAMu.Unlock()
 +	ctx, cancel := context.WithTimeout(ctx, tkaTimeout)
@@ -1763,10 +1864,10 @@ index 0000000..307282f
 +}
 diff --git a/hscontrol/tkad_test.go b/hscontrol/tkad_test.go
 new file mode 100644
-index 0000000..37497a0
+index 0000000..7c65043
 --- /dev/null
 +++ b/hscontrol/tkad_test.go
-@@ -0,0 +1,726 @@
+@@ -0,0 +1,794 @@
 +package hscontrol
 +
 +import (
@@ -1923,7 +2024,15 @@ index 0000000..37497a0
 +	require.NoError(t, h.state.DB().DB.Save(n).Error)
 +	h.state.PutNodeInStoreForTest(*n)
 +	f := &omnetFixture{snapshot: tkaSnapshot{Revision: 7, Nodes: []tkaRegistryNode{{n.ID, n.NodeKey, n.TKAKey.Verifier(), []byte("accepted-signature")}}}}
-+	a := &tkaAdapter{h: h, socket: omnetSocket(t, f), owner: uint64(user.ID), failed: make(chan struct{}), healthy: true}
++	a := &tkaAdapter{
++		h:             h,
++		socket:        omnetSocket(t, f),
++		owner:         uint64(user.ID),
++		failed:        make(chan struct{}),
++		healthy:       true,
++		registerSlots: make(chan struct{}, tkaRegisterSlots),
++		mapSlots:      make(chan struct{}, tkaMapSlots),
++	}
 +	h.tkad = a
 +	h.state.TKAReconcile = a.reconcileRegistration
 +	return h, *n, f
@@ -1952,6 +2061,58 @@ index 0000000..37497a0
 +	f.mu.Lock()
 +	require.Zero(t, f.lastHeader[5], "non-owner cannot assert admin")
 +	f.mu.Unlock()
++}
++
++func TestOmnetUnregisteredNoiseIdentitySkipsAuthority(t *testing.T) {
++	h, n, f := omnetApp(t)
++	ns := &noiseServer{headscale: h, machineKey: key.NewMachine().Public()}
++	body := []byte(fmt.Sprintf("{\"NodeKey\":%q}", n.NodeKey.String()))
++	w := httptest.NewRecorder()
++	ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), 1)
++	require.Equal(t, http.StatusUnauthorized, w.Code, "machine key must match")
++	// A registered machine key with an unregistered node key is also refused.
++	ns.machineKey = n.MachineKey
++	body = []byte(fmt.Sprintf("{\"NodeKey\":%q}", key.NewNode().Public().String()))
++	w = httptest.NewRecorder()
++	ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), 1)
++	require.Equal(t, http.StatusUnauthorized, w.Code, "node key must be committed")
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	require.Empty(t, f.calls, "unregistered identities must not reach the authority")
++}
++
++func TestOmnetBoundedAdmissionRejectsInsteadOfQueueing(t *testing.T) {
++	h, n, _ := omnetApp(t)
++	for range tkaRegisterSlots {
++		require.True(t, admit(h.tkad.registerSlots))
++	}
++	_, err := h.registrationPrelude(context.Background(), tailcfg.RegisterRequest{
++		NodeKey: key.NewNode().Public(), NLKey: key.NewNLPrivate().Public(),
++	}, n.MachineKey)
++	require.ErrorIs(t, err, errTKABusy, "saturated registration admission must fail fast")
++	for range tkaRegisterSlots {
++		release(h.tkad.registerSlots)
++	}
++	for range tkaMapSlots {
++		require.True(t, admit(h.tkad.mapSlots))
++	}
++	require.ErrorIs(t, h.tkaMapReady(context.Background()), errTKABusy, "saturated map admission must fail fast")
++	for range tkaMapSlots {
++		release(h.tkad.mapSlots)
++	}
++	require.NoError(t, h.tkaMapReady(context.Background()))
++}
++
++func TestOmnetAdapterSettingsRequiredAfterActivation(t *testing.T) {
++	h := createTestApp(t)
++	t.Setenv("OMNET_TKAD_SOCKET", "")
++	t.Setenv("OMNET_TKAD_ADMIN_USER_ID", "")
++	require.NoError(t, h.initTKA(), "unused adapter may stay off")
++	user := h.state.CreateUserForTest("omnet-owner")
++	n := h.state.CreateRegisteredNodeForTest(user, "omnet-node")
++	n.TKAKey = key.NewNLPrivate().Public()
++	require.NoError(t, h.state.DB().DB.Save(n).Error)
++	require.Error(t, h.initTKA(), "adapter state must not silently fall back to stock maps")
 +}
 +
 +func TestOmnetRestartDoesNotRewriteRegistry(t *testing.T) {
@@ -2086,8 +2247,16 @@ index 0000000..37497a0
 +	ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), 1)
 +	require.Equal(t, http.StatusUnauthorized, w.Code)
 +	f.mu.Lock()
-+	defer f.mu.Unlock()
 +	require.NotContains(t, f.calls, byte(1))
++	f.mu.Unlock()
++	// A rejected identity no longer performs shared persistence work; orphan
++	// removal is the watcher's job, which the fixture drives directly.
++	h.state.TKAMu.Lock()
++	_, _, err = h.tkad.reconcile(context.Background())
++	h.state.TKAMu.Unlock()
++	require.NoError(t, err)
++	f.mu.Lock()
++	defer f.mu.Unlock()
 +	require.Empty(t, f.snapshot.Nodes, "deleted registry identity must be reconciled")
 +}
 +
