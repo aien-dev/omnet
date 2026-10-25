@@ -1,0 +1,459 @@
+note SPDX-License-Identifier: BSD-3-Clause
+note Copyright (c) Tailscale Inc & contributors. See tailscale.LICENSE.
+note Two independent authorities, each 128 immutable nodes. Scratch staging is unreachable until commit.
+global tkap_a uchar 16777216
+global tkap_s uchar 16777216
+global tkap_h uchar 8192
+global tkap_m ulong 1536
+global tkap_c ulong 16
+global tkap_l ulong 1
+
+fn tkaselect lane ulong to ulong
+if gt lane 1
+ret 65538
+end
+put tkap_l 0 lane
+ret 0
+end
+
+fn tkareset to void
+for i ulong 8
+put tkap_c add mul get tkap_l 0 8 i 0
+end
+end
+
+fn tkacget f ulong to ulong
+ret get tkap_c add mul get tkap_l 0 8 f
+end
+
+fn tkacset f ulong v ulong to void
+put tkap_c add mul get tkap_l 0 8 f v
+end
+
+fn tkaidx i ulong to ulong
+ret add mul get tkap_l 0 128 i
+end
+
+fn tkamget i ulong f ulong to ulong
+ret get tkap_m add mul tkaidx i 6 f
+end
+
+fn tkamset i ulong f ulong v ulong to void
+put tkap_m add mul tkaidx i 6 f v
+end
+
+fn tkaget i ulong state ulong o edit uchar 65536 to ulong
+if ge i tkacget 0
+ret 65541
+end
+n = tkamget i state
+p = mul tkaidx i 65536
+for j ulong n
+if eq state 0
+put o j get tkap_a add p j
+else
+put o j get tkap_s add p j
+end
+end
+ret n
+end
+
+fn tkahget i ulong o edit uchar 32 to void
+for j ulong 32
+put o j get tkap_h add mul tkaidx i 32 j
+end
+end
+
+fn tkahead o edit uchar 32 to ulong
+if eq tkacget 0 0
+ret 65542
+end
+tkahget tkacget 1 o
+ret 0
+end
+
+fn tkafind h view uchar 32 to ulong
+for i ulong tkacget 0
+same = ulong 1
+for j ulong 32
+if ne get h j get tkap_h add mul tkaidx i 32 j
+same = 0
+end
+end
+if ne same 0
+ret i
+end
+end
+ret 65541
+end
+
+fn tkastate h view uchar 32 o edit uchar 65536 to ulong
+i = tkafind h
+if ge i 65537
+ret i
+end
+ret tkaget i 1 o
+end
+
+fn tkacurrent o edit uchar 65536 to ulong
+if eq tkacget 0 0
+ret 65542
+end
+ret tkaget tkacget 1 1 o
+end
+
+fn tkaexport s view uchar 65536 p ulong o edit uchar 16384 n ulong to void
+for i ulong 32
+put o add n i get s add p i
+end
+end
+
+fn tkakeys o edit uchar 16384 to ulong
+s = new uchar 65536 0
+n = tkacurrent s
+if gt n 65536
+ret n
+end
+t = new ulong 131074 0
+n = cbrdec s n t
+r = cbrmfind t 0 3
+j = add r 1
+cnt = ulong 0
+for i ulong cbrval t r
+p = cbrmfind t j 3
+if eq cbrval t p 32
+p = cbrpoff t p
+n = mul cnt 32
+tkaexport s p o n
+cnt = add cnt 1
+end
+j = cbrnext t j
+end
+ret cnt
+end
+
+fn tkastore a view uchar 65536 n ulong s view uchar 65536 sn ulong parent ulong to ulong
+i = tkacget 0
+if ge i 128
+ret 65538
+end
+h = new uchar 32 0
+z = tkahash a n 0 h
+if ne z 0
+ret z
+end
+p = mul tkaidx i 65536
+for j ulong n
+put tkap_a add p j get a j
+end
+for j ulong sn
+put tkap_s add p j get s j
+end
+p = mul tkaidx i 32
+for j ulong 32
+put tkap_h add p j get h j
+end
+tkamset i 0 n
+tkamset i 1 sn
+tkamset i 2 parent
+t = new ulong 131074 0
+z = cbrdec a n t
+tkamset i 4 tkalen t 0 1
+tkacset 0 add i 1
+ret i
+end
+
+fn tkaboot a view uchar 65536 n ulong to ulong
+if ne tkacget 0 0
+ret 65541
+end
+b = new uchar 65536 0
+z = tkamodel a n 1 b 1
+if gt z 65536
+ret z
+end
+t = new ulong 131074 0
+x = cbrdec b z t
+if ne tkalen t 0 1 5
+ret 65539
+end
+r = cbrmfind t 0 5
+if eq r 0
+ret 65539
+end
+s = new uchar 65536 0
+w = new ulong 4 0
+tkaraw b t r s w
+o = new uchar 65536 0
+sn = tkatrusted b z s get w 0 o 1
+if gt sn 65536
+ret sn
+end
+x = tkastore b z o sn 65541
+if ge x 65537
+ret x
+end
+tkacset 1 0
+ret 0
+end
+
+fn tkabegin to ulong
+if or eq tkacget 0 0 ne tkacget 3 0
+ret 65542
+end
+tkacset 2 tkacget 0
+tkacset 3 1
+ret 0
+end
+
+fn tkaabort to void
+if ne tkacget 3 0
+tkacset 0 tkacget 2
+tkacset 3 0
+end
+end
+
+fn tkastageone a view uchar 65536 n ulong to ulong
+if eq tkacget 3 0
+ret 65542
+end
+b = new uchar 65536 0
+z = tkamodel a n 1 b 1
+if gt z 65536
+ret z
+end
+h = new uchar 32 0
+x = tkahash b z 0 h
+if ne x 0
+ret x
+end
+if lt tkafind h 65537
+ret 0
+end
+t = new ulong 131074 0
+x = cbrdec b z t
+r = cbrmfind t 0 2
+if eq tkalen t 0 2 0
+ret 65541
+end
+note Parent() copies up to32 bytes, but applyVerifiedAUM ultimately requires exact32.
+if ne cbrval t r 32
+ret 65541
+end
+for i ulong 32
+put h i get b add cbrpoff t r i
+end
+parent = tkafind h
+if ge parent 65537
+ret parent
+end
+s = new uchar 65536 0
+sn = tkaget parent 1 s
+o = new uchar 65536 0
+on = tkatrusted b z s sn o 0
+if gt on 65536
+ret on
+end
+x = tkastore b z o on parent
+if ge x 65537
+ret x
+end
+parent = tkaweightbuf b z s sn
+tkamset x 3 parent
+ret 0
+end
+
+fn tkastage a view uchar 65536 n ulong to ulong
+z = tkastageone a n
+if ne z 0
+tkaabort
+end
+ret z
+end
+
+fn tkahless a ulong b ulong to ulong
+for j ulong 32
+x = get tkap_h add mul tkaidx a 32 j
+y = get tkap_h add mul tkaidx b 32 j
+if ne x y
+ret tkabool lt x y
+end
+end
+ret 0
+end
+
+fn tkanext parent ulong to ulong
+best = ulong 65541
+for i ulong tkacget 0
+if eq tkamget i 2 parent
+if eq best 65541
+best = i
+else
+x = tkamget i 3
+y = tkamget best 3
+if gt x y
+best = i
+else
+if eq x y
+x = tkabool eq tkamget i 4 2
+y = tkabool eq tkamget best 4 2
+if gt x y
+best = i
+else
+if and eq x y ne tkahless i best 0
+best = i
+end
+end
+end
+end
+end
+end
+end
+ret best
+end
+
+fn tkacommit to ulong
+if eq tkacget 3 0
+ret 65542
+end
+head = ulong 0
+for i ulong 128
+next = tkanext head
+if eq next 65541
+tkacset 1 head
+tkacset 3 0
+ret 0
+end
+head = next
+end
+tkaabort
+ret 65538
+end
+
+fn tkainform d view uchar 65536 spans view ulong 256 count ulong to ulong
+if or eq count 0 gt count 128
+ret 65538
+end
+z = tkabegin
+if ne z 0
+ret z
+end
+b = new uchar 65536 0
+for i ulong count
+p = get spans mul i 2
+n = get spans add mul i 2 1
+if or gt p 65536 gt n sub 65536 p
+tkaabort
+ret 65538
+end
+for j ulong n
+put b j get d add p j
+end
+z = tkastage b n
+if ne z 0
+tkaabort
+ret z
+end
+end
+ret tkacommit
+end
+
+note Offer buffer consists of head then ancestor hashes; return total hash count.
+fn tkaoffer o edit uchar 65536 to ulong
+if eq tkacget 0 0
+ret 65542
+end
+cur = tkacget 1
+h = new uchar 32 0
+tkahget cur h
+for j ulong 32
+put o j get h j
+end
+cnt = ulong 1
+skip = ulong 4
+for i ulong 128
+if and gt i 0 eq rem i skip 0
+tkahget cur h
+for j ulong 32
+put o add mul cnt 32 j get h j
+end
+cnt = add cnt 1
+skip = mul skip 4
+end
+if eq cur 0
+break
+end
+cur = tkamget cur 2
+end
+tkahget 0 h
+for j ulong 32
+put o add mul cnt 32 j get h j
+end
+ret add cnt 1
+end
+
+fn tkaonpath node ulong to ulong
+cur = tkacget 1
+for i ulong 128
+if eq cur node
+ret 1
+end
+if eq cur 0
+ret 0
+end
+cur = tkamget cur 2
+end
+ret 0
+end
+
+note Intersection returns node index; mode[0]=0 up-to-date,1 head,2 tail.
+fn tkainter offer view uchar 65536 count ulong mode edit ulong 1 to ulong
+if or eq count 0 gt count 2048
+ret 65538
+end
+if eq tkacget 0 0
+ret 65542
+end
+h = new uchar 32 0
+for i ulong count
+for j ulong 32
+put h j get offer add mul i 32 j
+end
+node = tkafind h
+if lt node 65537
+if ne tkaonpath node 0
+put mode 0 2
+if eq i 0
+put mode 0 1
+if eq node tkacget 1
+put mode 0 0
+end
+end
+ret node
+end
+end
+end
+ret 65542
+end
+
+note Missing result is ordered node indices; retrieve bytes with tkaget(index,0,out).
+fn tkamissing offer view uchar 65536 count ulong nodes edit ulong 128 to ulong
+mode = new ulong 1 0
+cur = tkainter offer count mode
+if ge cur 65537
+ret cur
+end
+if eq get mode 0 0
+ret 0
+end
+n = ulong 0
+for i ulong 128
+cur = tkanext cur
+if eq cur 65541
+ret n
+end
+put nodes n cur
+n = add n 1
+end
+ret 65538
+end

@@ -1,0 +1,129 @@
+note Binary framed differential driver. Header n:u32le, count:u16le, node:32, keys:count*32, input:n.
+fn nsread b edit uchar 65536 n ulong eof ulong to ulong
+p = ulong 0
+while lt p n bound 65536
+v = read 0 b p sub n p
+if le v 0
+if and eq p 0 ne eof 0
+ret 0
+end
+exit 65
+end
+p = add p ulong v
+end
+ret 1
+end
+
+fn nswrite b view uchar 65536 n ulong to void
+p = ulong 0
+while lt p n bound 65536
+v = write 1 b p sub n p
+if le v 0
+exit 66
+end
+p = add p ulong v
+end
+end
+
+fn nshead hdr edit uchar 65536 n ulong to void
+put hdr 0 1
+for j ulong 4
+v = and shr n mul j 8 255
+put hdr add j 1 uchar v
+end
+nswrite hdr 5
+end
+
+fn nsone d view uchar 65536 n ulong node view uchar 32 keys view uchar 16384 count ulong to void
+o = new uchar 65536 0
+t = new ulong 131074 0
+m = new ulong 132 0
+h = new uchar 32 0
+hdr = new uchar 65536 0
+if ne nksdec d n t m 0
+put o 0 0
+nswrite o 1
+else
+v = nksser d t m o 0 0
+if gt v 65536
+exit 67
+end
+nshead hdr v
+nswrite o v
+if eq nkshash d t m 0 h 0
+exit 67
+end
+for j ulong 32
+put hdr j get h j
+end
+put hdr 32 uchar nksauth d t m node keys count
+nswrite hdr 33
+end
+end
+
+note Caller-boundary checks must reject without a trap or any partial response.
+fn nsbounds to void
+d = new uchar 65536 0
+o = new uchar 65536 0
+t = new ulong 131074 0
+m = new ulong 132 0
+h = new uchar 32 0
+keys = new uchar 16384 0
+if ne nksdec d 65537 t m 1
+exit 68
+end
+put d 0 160
+if ne nksdec d 1 t m 0
+exit 68
+end
+if ne nksser d t m o 16 0 65537
+exit 68
+end
+if ne nksauth d t m h keys 513 0
+exit 68
+end
+if ne nksauth d t m h keys 0 0
+exit 68
+end
+put d 0 161
+put d 1 2
+put d 2 89
+put d 3 255
+put d 4 250
+if ne nksdec d 65535 t m 0
+exit 68
+end
+if ne nksser d t m o 0 0 65537
+exit 68
+end
+if ne nkshash d t m 0 h 0
+exit 68
+end
+end
+
+fn main to int
+d = new uchar 65536 0
+node = new uchar 32 0
+keys = new uchar 16384 0
+nsbounds
+while ne nsread d 38 1 0 bound 100000
+n = ulong 0
+for j ulong 4
+n = or n shl ulong get d j mul j 8
+end
+count = add ulong get d 4 shl ulong get d 5 8
+if or gt n 65536 gt count 512
+exit 65
+end
+for j ulong 32
+put node j get d add j 6
+end
+v = nsread d mul count 32 0
+for j ulong mul count 32
+put keys j get d j
+end
+v = nsread d n 0
+nsone d n node keys count
+end
+ret 0
+end

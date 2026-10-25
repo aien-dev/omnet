@@ -1,6 +1,6 @@
 # Tailnet Lock for self-hosted control servers
 
-Status: design accepted for implementation; crypto primitives done. See [Plan and status](#plan-and-status).
+Status: crypto, typed models, node signatures and bounded in-memory authority implemented. See [Plan and status](#plan-and-status).
 
 ## Problem
 
@@ -11,8 +11,8 @@ its node key carries a signature from a key the devices themselves hold.
 
 The device side ships in the stock Tailscale client. The self-hosted control server headscale does
 not implement the server side ([headscale#1307](https://github.com/juanfont/headscale/issues/1307),
-open since 2023). Without it, a self-hosted tailnet has no defence against a compromised control
-server.
+open since 2023). Without server-side support, a self-hosted tailnet cannot use this client-enforced
+signature check to constrain device admission by a compromised control server.
 
 ## Goal and non-goals
 
@@ -123,8 +123,11 @@ tailnet owner. It makes that decision from headscale's own user model.
 that headscale connects to (design rule 4). A crash in tkad, which is what an Omega trap is, refuses
 TKA requests. It never makes headscale skip verification: the glue fails closed.
 
-**Message limits**: every request body is capped (64 KiB, the capacity of the crypto units) before
-it is parsed, and the number of AUMs per sync is capped (design rule 1). Some fields have tighter
+**Current unit limits**: model and crypto inputs are capped at 64 KiB. The in-memory authority holds
+128 AUMs per slot and two slots; capacity exhaustion returns an error without evicting history.
+These limits are not a claim of full client interoperability: valid large checkpoints and long
+histories can exceed this implementation profile. Service message limits and durable storage must
+be resolved and exercised against stock clients before deployment. Some fields have tighter
 limits, which the request handler checks before calling a unit. A decoded `DisablementSecret` longer
 than 1024 bytes is rejected, because `om/argon2` `a2tka` traps on longer input. The client sends
 32 bytes. The pinned client caps
@@ -143,8 +146,9 @@ that way. That is a client issue outside this project; tkad's error bodies are s
 | Argon2i, TKA disablement KDF (`om/argon2`) | Omega | done: RFC 9106 §5.2, 41 Go cases incl. TKA parameters, 200 random Go cases |
 | base64, base32, hex, `nodekey:` codecs (`om/codec`) | Omega | done: RFC 4648 §10, 249 malformed cases, 39,806-case Go differential |
 | CTAP2 CBOR encode and decode, bounded (`om/cbor`) | Omega | done: RFC 8949 App. A, 1,200 `tka` structures byte-identical with matching `AUM.Hash`, 475 hostile cases |
-| AUM / State / NodeKeySignature model and validation | Omega | planned |
-| Chain: fork choice, state at hash, sync offer, intersection, Inform | Omega | planned |
+| AUM / State / Key model, validation and authorized transitions (`om/tka`) | Omega | implemented: typed reconstruction and differential oracle |
+| NodeKeySignature model and verification (`om/tkasig`) | Omega | implemented: direct, credential and rotation, strict/ZIP-215 rules |
+| Bounded in-memory chain (`om/tka`): fork choice, state at hash, sync, atomic Inform | Omega | implemented: two slots, 128 AUMs each; no durable storage |
 | JSON for the eight RPC types | Omega | planned |
 | tkad service: socket loop, storage | Omega | planned |
 | headscale glue | Go (fork) | planned |
@@ -157,20 +161,38 @@ Each component is checked against two referees: published vectors where they exi
   the Omega CBOR, and must produce identical hashes.
 - **Chain**: generated chains with forks, checkpoints, removed keys and bad signatures. tkad's head,
   sync offers and missing-AUM sets must equal `tka.Authority`'s.
-- **Negative corpus**: truncated CBOR, non-canonical CBOR, oversized fields, unknown kinds, wrong
-  parents and bad signatures. Each must be rejected, with no trap (a trap is a denial-of-service bug).
-  Type-level rejections that a generic CBOR layer cannot decide (a wrong field type, an out-of-range
-  integer, a duplicate `Meta` key, bad UTF-8 in `Meta`) belong to the model layer; `om/cbor`'s hostile
-  corpus already marks these cases for it.
+- **Negative corpus**: truncated CBOR, oversized fields, wrong parents and bad signatures reject
+  without trapping. Non-shortest CBOR and reordered maps are accepted where the client accepts
+  them; hashes use typed canonical reserialization. Unknown AUM kinds follow the upstream signed
+  no-op compatibility contract, not an unconditional rejection rule. Typed duplicates, field-type
+  errors and invalid decoded UTF-8 are rejected by the model layer.
 - **End to end**: stock clients in containers against the patched headscale. Run `tailscale lock
   init`, sign, add a node, remove a key, rotate a node key, and disable. Check that an unsigned node is
   refused by its peers.
+
+### Stage-three verification
+
+The complete `tools/test.sh` run on ARM64 Linux passed all nine unit suites with the pinned
+compiler (`734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61`).
+Go 1.26.8 supplied the pinned TKA oracle; the existing optional oracle comparisons also ran.
+
+- Authority/model: 10,691 differential records matched upstream; a signature-bypass mutant
+  completed all records and differed on four.
+- Node signatures: 1,135 differential cases matched upstream; nine completed-result mutants
+  were detected, and a trapping mutant was rejected by the harness.
+- Cross-unit scenario: bootstrap a signed authority, authorize a node, apply a signed removal
+  of its authority key, export the new trusted-key table, then reject the same node signature.
+  The fixture generator asserts the same before/after result using upstream `Authority`.
+
+These are bounded in-memory host results, not stock-client end-to-end, durable-storage,
+constant-time, or production-network qualification.
 
 ## Plan and status
 
 1. Crypto primitives: BLAKE2s, SHA-512, Ed25519. **Done.**
 2. BLAKE2b, Argon2i, codecs, CBOR. **Done.**
-3. TKA model and chain logic, differential against `tka`.
+3. TKA model and bounded in-memory chain logic, differential against `tka`. **Implemented.**
+   Cross-unit smoke checks node authorization before and after a signed authority-key removal.
 4. tkad service, storage, JSON.
 5. headscale glue and end-to-end tests with stock clients.
 6. Review by a second implementer before any production use. Until then this is pre-alpha and does
