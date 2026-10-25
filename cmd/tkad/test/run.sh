@@ -9,4 +9,5 @@ bin=$(sh "$root/tools/build-tkad.sh")
 python3 "$root/cmd/tkad/test/smoke.py" "$bin"
 python3 "$root/cmd/tkad/test/mutant.py" "$root" "$bin"
 python3 "$root/cmd/tkad/test/rollover.py" "$root" "$bin"
+python3 "$root/cmd/tkad/test/directory.py" "$bin"
 python3 "$root/cmd/tkad/test/faults.py" "$root" "$bin"
