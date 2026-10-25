@@ -1,0 +1,2595 @@
+diff --git a/go.mod b/go.mod
+index 6b96022..0067eae 100644
+--- a/go.mod
++++ b/go.mod
+@@ -2,6 +2,23 @@ module github.com/juanfont/headscale
+ 
+ go 1.27.3
+ 
++// NOTE: modernc sqlite has a fragile dependency
++// chain and it is important that they are updated
++// in lockstep to ensure that they do not break
++// some architectures and similar at runtime:
++// https://github.com/juanfont/headscale/issues/2188
++//
++// Fragile libc dependency:
++// https://pkg.go.dev/modernc.org/sqlite#hdr-Fragile_modernc_org_libc_dependency
++// https://gitlab.com/cznic/sqlite/-/issues/177
++//
++// To upgrade, determine the new SQLite version to
++// be used, and consult the `go.mod` file:
++// https://gitlab.com/cznic/sqlite/-/blob/master/go.mod
++// to find
++// the appropriate `libc` version, then upgrade them
++// together, e.g:
++// go get modernc.org/libc@v1.55.3 modernc.org/sqlite@v1.33.1
+ require (
+ 	github.com/arl/statsviz v0.8.0
+ 	github.com/cenkalti/backoff/v5 v5.0.3
+@@ -54,43 +71,12 @@ require (
+ 	gopkg.in/yaml.v3 v3.0.1
+ 	gorm.io/driver/postgres v1.6.0
+ 	gorm.io/gorm v1.31.1
++	modernc.org/sqlite v1.52.0
+ 	pgregory.net/rapid v1.3.0
+ 	tailscale.com v1.102.0
+ 	zombiezen.com/go/postgrestest v1.0.1
+ )
+ 
+-// NOTE: modernc sqlite has a fragile dependency
+-// chain and it is important that they are updated
+-// in lockstep to ensure that they do not break
+-// some architectures and similar at runtime:
+-// https://github.com/juanfont/headscale/issues/2188
+-//
+-// Fragile libc dependency:
+-// https://pkg.go.dev/modernc.org/sqlite#hdr-Fragile_modernc_org_libc_dependency
+-// https://gitlab.com/cznic/sqlite/-/issues/177
+-//
+-// To upgrade, determine the new SQLite version to
+-// be used, and consult the `go.mod` file:
+-// https://gitlab.com/cznic/sqlite/-/blob/master/go.mod
+-// to find
+-// the appropriate `libc` version, then upgrade them
+-// together, e.g:
+-// go get modernc.org/libc@v1.55.3 modernc.org/sqlite@v1.33.1
+-require (
+-	modernc.org/libc v1.72.3 // indirect
+-	modernc.org/mathutil v1.7.1 // indirect
+-	modernc.org/memory v1.11.0 // indirect
+-	modernc.org/sqlite v1.52.0
+-)
+-
+-// NOTE: gvisor must be updated in lockstep with
+-// tailscale.com. The version used here should match
+-// the version required by the tailscale.com dependency.
+-// To find the correct version, check tailscale.com's
+-// go.mod file for the gvisor.dev/gvisor version:
+-// https://github.com/tailscale/tailscale/blob/main/go.mod
+-require gvisor.dev/gvisor v0.0.0-20260224225140-573d5e7127a8 // indirect
+-
+ require (
+ 	atomicgo.dev/cursor v0.2.0 // indirect
+ 	atomicgo.dev/keyboard v0.2.10 // indirect
+@@ -245,11 +231,21 @@ require (
+ 	golang.org/x/term v0.46.0 // indirect
+ 	golang.org/x/text v0.42.0 // indirect
+ 	golang.org/x/time v0.15.0 // indirect
+-	golang.org/x/tools v0.49.0 // indirect
++	golang.org/x/tools v0.50.0 // indirect
+ 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
+ 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
+ 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
++	// NOTE: gvisor must be updated in lockstep with
++	// tailscale.com. The version used here should match
++	// the version required by the tailscale.com dependency.
++	// To find the correct version, check tailscale.com's
++	// go.mod file for the gvisor.dev/gvisor version:
++	// https://github.com/tailscale/tailscale/blob/main/go.mod
++	gvisor.dev/gvisor v0.0.0-20260224225140-573d5e7127a8 // indirect
+ 	k8s.io/client-go v0.34.0 // indirect
++	modernc.org/libc v1.72.3 // indirect
++	modernc.org/mathutil v1.7.1 // indirect
++	modernc.org/memory v1.11.0 // indirect
+ 	sigs.k8s.io/yaml v1.6.0 // indirect
+ 	software.sslmate.com/src/go-pkcs12 v0.4.0 // indirect
+ )
+diff --git a/go.sum b/go.sum
+index 07b0670..8ec874d 100644
+--- a/go.sum
++++ b/go.sum
+@@ -610,6 +610,8 @@ golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc
+ golang.org/x/tools v0.6.0/go.mod h1:Xwgl3UAJ/d3gWutnCtw505GrjyAbvKui8lOU390QaIU=
+ golang.org/x/tools v0.49.0 h1:3NI7VXzL9+1WZD52Dx2ttoPwD5DWrFGpl9mFZDlmisI=
+ golang.org/x/tools v0.49.0/go.mod h1:SJNXV9DBKT0UbdttsQjbfJlAE/q+y36++zo3uL3N0Oo=
++golang.org/x/tools v0.50.0 h1:c2ifzfcuY7L90lZ2aKd8S4K2NpASF08SZx9ZuJkHmSU=
++golang.org/x/tools v0.50.0/go.mod h1:7ulVMw3831Mwi5EZD6RomGyffr4VFjuNYXf2BbCEAV0=
+ golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 h1:B82qJJgjvYKsXS9jeunTOisW56dUokqW/FOteYJJ/yg=
+ golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2/go.mod h1:deeaetjYA+DHMHg+sMSMI58GrEteJUUzzw7en6TJQcI=
+diff --git a/hscontrol/app.go b/hscontrol/app.go
+index 864252f..654d7e0 100644
+--- a/hscontrol/app.go
++++ b/hscontrol/app.go
+@@ -98,6 +98,7 @@ type Headscale struct {
+ 	state           *state.State
+ 	noisePrivateKey *key.MachinePrivate
+ 	ephemeralGC     *db.EphemeralGarbageCollector
++	tkad            *tkaAdapter
+ 
+ 	DERPServer *derpServer.DERPServer
+ 
+@@ -642,6 +643,10 @@ func (h *Headscale) Serve() error {
+ 		Str("minimum_version", capver.TailscaleVersion(capver.MinSupportedCapabilityVersion)).
+ 		Msg("Clients with a lower minimum version will be rejected")
+ 
++	if err := h.initTKA(); err != nil {
++		return fmt.Errorf("initializing omnet adapter: %w", err)
++	}
++
+ 	h.mapBatcher = mapper.NewBatcherAndMapper(h.cfg, h.state)
+ 
+ 	h.mapBatcher.Start()
+@@ -701,6 +706,7 @@ func (h *Headscale) Serve() error {
+ 	defer scheduleCancel()
+ 
+ 	go h.scheduledTasks(scheduleCtx)
++	go h.watchTKA(scheduleCtx)
+ 
+ 	if zl.GlobalLevel() == zl.TraceLevel {
+ 		zerolog.RespLog = true
+diff --git a/hscontrol/auth.go b/hscontrol/auth.go
+index 7f50f80..0c05334 100644
+--- a/hscontrol/auth.go
++++ b/hscontrol/auth.go
+@@ -331,6 +331,9 @@ func (h *Headscale) waitForFollowup(
+ 			case verdict = <-reg.WaitForAuth():
+ 			}
+ 		}
++		if h.tkad != nil && verdict.Err != nil {
++			return nil, verdict.Err
++		}
+ 
+ 		if verdict.Accept() {
+ 			if !verdict.Node.Valid() {
+@@ -397,10 +400,12 @@ func registrationDataFromRequest(
+ 	}
+ 
+ 	regData := &types.RegistrationData{
+-		MachineKey: machineKey,
+-		NodeKey:    req.NodeKey,
+-		Hostname:   hostname,
+-		Hostinfo:   req.Hostinfo,
++		MachineKey:   machineKey,
++		NodeKey:      req.NodeKey,
++		Hostname:     hostname,
++		Hostinfo:     req.Hostinfo,
++		TKAKey:       req.NLKey,
++		TKASignature: append([]byte(nil), req.NodeKeySignature...),
+ 	}
+ 
+ 	if !req.Expiry.IsZero() {
+diff --git a/hscontrol/db/db.go b/hscontrol/db/db.go
+index 824afb4..5836e3e 100644
+--- a/hscontrol/db/db.go
++++ b/hscontrol/db/db.go
+@@ -808,6 +808,18 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
+ 				},
+ 				Rollback: func(db *gorm.DB) error { return nil },
+ 			},
++			{
++				ID: "202610251600-omnet-tka-registration",
++				Migrate: func(tx *gorm.DB) error {
++					if err := tx.Migrator().AddColumn(&types.Node{}, "TKAKey"); err != nil {
++						return err
++					}
++					if err := tx.Migrator().AddColumn(&types.Node{}, "TKASignature"); err != nil {
++						return err
++					}
++					return tx.Migrator().CreateTable(&types.OmnetCheckpoint{})
++				},
++			},
+ 		},
+ 	)
+ 
+@@ -819,6 +831,7 @@ WHERE tags IS NOT NULL AND tags != '[]' AND tags != '' AND tags != 'null'
+ 			&types.APIKey{},
+ 			&types.Node{},
+ 			&types.Policy{},
++			&types.OmnetCheckpoint{},
+ 		)
+ 		if err != nil {
+ 			return err
+diff --git a/hscontrol/db/schema.sql b/hscontrol/db/schema.sql
+index 781446c..95986af 100644
+--- a/hscontrol/db/schema.sql
++++ b/hscontrol/db/schema.sql
+@@ -72,6 +72,8 @@ CREATE TABLE nodes(
+   machine_key text,
+   node_key text,
+   disco_key text,
++  tka_key text,
++  tka_signature blob,
+ 
+   endpoints text,
+   host_info text,
+@@ -112,3 +114,8 @@ CREATE TABLE database_versions(
+   version text NOT NULL,
+   updated_at datetime
+ );
++
++CREATE TABLE omnet_checkpoints(
++  id integer PRIMARY KEY AUTOINCREMENT,
++  revision integer
++);
+diff --git a/hscontrol/mapper/batcher.go b/hscontrol/mapper/batcher.go
+index e37daa0..c6facb7 100644
+--- a/hscontrol/mapper/batcher.go
++++ b/hscontrol/mapper/batcher.go
+@@ -876,6 +876,12 @@ func (b *Batcher) MapResponseFromChange(id types.NodeID, ch change.Change) (*tai
+ 	}
+ }
+ 
++// FullMapResponse builds a full response without requiring an existing stream.
++// The Omnet wire barrier uses this for non-stream reads and key-patch replacement.
++func (b *Batcher) FullMapResponse(id types.NodeID, version tailcfg.CapabilityVersion) (*tailcfg.MapResponse, error) {
++	return b.mapper.fullMapResponse(id, version)
++}
++
+ // DebugNodeInfo contains debug information about a node's connections.
+ type DebugNodeInfo struct {
+ 	Connected         bool `json:"connected"`
+diff --git a/hscontrol/mapper/node_conn.go b/hscontrol/mapper/node_conn.go
+index 9396854..f114ba0 100644
+--- a/hscontrol/mapper/node_conn.go
++++ b/hscontrol/mapper/node_conn.go
+@@ -370,7 +370,13 @@ func (mc *multiChannelNodeConn) send(data *tailcfg.MapResponse) error {
+ 	)
+ 
+ 	for _, conn := range snapshot {
+-		err := conn.send(conn.withSSHPolicyDelta(conn.withSelfDelta(data)))
++		frame := data
++		// Omega decorates self signatures after this queue. Comparing the
++		// undecorated self would hide signature-only updates from that node.
++		if mc.mapper == nil || mc.mapper.state == nil || mc.mapper.state.TKAReconcile == nil {
++			frame = conn.withSelfDelta(frame)
++		}
++		err := conn.send(conn.withSSHPolicyDelta(frame))
+ 		if err != nil {
+ 			lastErr = err
+ 
+diff --git a/hscontrol/noise.go b/hscontrol/noise.go
+index 20b0889..f57647f 100644
+--- a/hscontrol/noise.go
++++ b/hscontrol/noise.go
+@@ -168,6 +168,7 @@ func (h *Headscale) NoiseUpgradeHandler(
+ 	r.Route("/machine", func(r chi.Router) {
+ 		r.Post("/register", ns.RegistrationHandler)
+ 		r.Post("/map", ns.PollNetMapHandler)
++		ns.tkaRoutes(r)
+ 
+ 		// SSH Check mode endpoint, consulted to validate if a given SSH connection should be accepted or rejected.
+ 		r.Get("/ssh/action/{src_node_id}/to/{dst_node_id}", ns.SSHActionHandler)
+@@ -752,6 +753,11 @@ func (ns *noiseServer) PollNetMapHandler(
+ 		return
+ 	}
+ 
++	if err := ns.headscale.tkaMapReady(req.Context()); err != nil {
++		http.Error(writer, errTKAUnavailable.Error(), http.StatusServiceUnavailable)
++		return
++	}
++
+ 	nv, err := ns.getAndValidateNode(mapRequest)
+ 	if err != nil {
+ 		// The node is gone, but the client does not know that. Tailscale
+@@ -761,7 +767,7 @@ func (ns *noiseServer) PollNetMapHandler(
+ 		// that says "deleted", so reuse the expiry signal headscale already
+ 		// sends for expired nodes.
+ 		// See: https://github.com/juanfont/headscale/issues/3410
+-		if errors.Is(err, errNodeNotInStore) && mapRequest.Stream {
++		if errors.Is(err, errNodeNotInStore) && mapRequest.Stream && ns.headscale.tkad == nil {
+ 			expired := &tailcfg.MapResponse{
+ 				Node: &tailcfg.Node{
+ 					Key: mapRequest.NodeKey,
+@@ -823,6 +829,13 @@ func (ns *noiseServer) RegistrationHandler(
+ 			return &regReq, regErr(err)
+ 		}
+ 
++		resp, err = ns.headscale.registrationPrelude(req.Context(), regReq, ns.machineKey)
++		if err != nil {
++			return &regReq, regErr(err)
++		}
++		if resp != nil {
++			return &regReq, resp
++		}
+ 		resp, err = ns.headscale.handleRegister(req.Context(), regReq, ns.conn.Peer())
+ 		if err != nil {
+ 			if httpErr, ok := errors.AsType[HTTPError](err); ok {
+@@ -836,6 +849,12 @@ func (ns *noiseServer) RegistrationHandler(
+ 			return &regReq, regErr(err)
+ 		}
+ 
++		if ns.headscale.tkad != nil && resp != nil && resp.MachineAuthorized && !resp.NodeKeyExpired && resp.AuthURL == "" {
++			if err := ns.headscale.state.TKARegisterCurrent(req.Context(), regReq, ns.machineKey); err != nil {
++				return &regReq, regErr(err)
++			}
++		}
++
+ 		return &regReq, resp
+ 	}()
+ 
+diff --git a/hscontrol/poll.go b/hscontrol/poll.go
+index 09b8ccd..8212f4c 100644
+--- a/hscontrol/poll.go
++++ b/hscontrol/poll.go
+@@ -8,6 +8,7 @@ import (
+ 	"fmt"
+ 	"math/rand/v2"
+ 	"net/http"
++	"sync"
+ 	"sync/atomic"
+ 	"time"
+ 
+@@ -51,6 +52,8 @@ type mapSession struct {
+ 	// writing is set while [mapSession.writeMap] runs, so
+ 	// [mapSession.stopFromBatcher] interrupts only a write that may be stuck.
+ 	writing atomic.Bool
++	// Serializes deadline changes with stopFromBatcher, never network writes.
++	writeDeadlineMu sync.Mutex
+ 
+ 	keepAlive       time.Duration
+ 	keepAliveTicker *time.Ticker
+@@ -105,6 +108,8 @@ func (m *mapSession) resetKeepAlive() {
+ }
+ 
+ func (m *mapSession) stopFromBatcher() {
++	m.writeDeadlineMu.Lock()
++	defer m.writeDeadlineMu.Unlock()
+ 	if m.cancelChClosed.CompareAndSwap(false, true) {
+ 		close(m.cancelCh)
+ 
+@@ -162,6 +167,17 @@ func (m *mapSession) serve() {
+ 	if m.isEndpointUpdate() {
+ 		m.w.WriteHeader(http.StatusOK)
+ 		mapResponseEndpointUpdates.WithLabelValues("ok").Inc()
++		return
++	}
++	if m.h.tkad != nil {
++		resp, err := m.h.mapBatcher.FullMapResponse(m.node.ID, m.capVer)
++		if err != nil {
++			httpError(m.w, err)
++			return
++		}
++		if err := m.writeMap(resp); err != nil {
++			httpError(m.w, err)
++		}
+ 	}
+ }
+ 
+@@ -312,11 +328,14 @@ func (m *mapSession) serveLongPoll() {
+ 	m.h.Change(mapReqChange)
+ 	m.h.Change(connectChanges...)
+ 
++	tkaFailure := m.h.tkaFailure()
+ 	// Loop through updates and continuously send them to the
+ 	// client.
+ 	for {
+ 		// consume channels with update, keep alives or "batch" blocking signals
+ 		select {
++		case <-tkaFailure:
++			return
+ 		case <-m.cancelCh:
+ 			m.log.Trace().Caller().Msg("poll cancelled received")
+ 			mapResponseEnded.WithLabelValues("cancelled").Inc()
+@@ -390,7 +409,7 @@ func (m *mapSession) writeMap(msg *tailcfg.MapResponse) error {
+ 
+ 	startWrite := time.Now()
+ 
+-	err := writeMapResponse(m.w, m.req.Compress, m.isStreaming(), msg)
++	err := m.writeTKAMap(msg)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -414,9 +433,17 @@ func (m *mapSession) writeMap(msg *tailcfg.MapResponse) error {
+ // It is shared with the deleted-node path in [noiseServer.PollNetMapHandler],
+ // which has no [mapSession] to write through.
+ func writeMapResponse(w http.ResponseWriter, compress string, flush bool, msg *tailcfg.MapResponse) error {
++	data, err := encodeMapResponse(compress, msg)
++	if err != nil {
++		return err
++	}
++	return writeMapFrame(w, flush, data)
++}
++
++func encodeMapResponse(compress string, msg *tailcfg.MapResponse) ([]byte, error) {
+ 	jsonBody, err := json.Marshal(msg)
+ 	if err != nil {
+-		return fmt.Errorf("marshalling map response: %w", err)
++		return nil, fmt.Errorf("marshalling map response: %w", err)
+ 	}
+ 
+ 	if compress == util.ZstdCompression {
+@@ -427,8 +454,11 @@ func writeMapResponse(w http.ResponseWriter, compress string, flush bool, msg *t
+ 	//nolint:gosec // G115: JSON response size will not exceed uint32 max
+ 	binary.LittleEndian.PutUint32(data, uint32(len(jsonBody)))
+ 	data = append(data, jsonBody...)
++	return data, nil
++}
+ 
+-	_, err = w.Write(data)
++func writeMapFrame(w http.ResponseWriter, flush bool, data []byte) error {
++	_, err := w.Write(data)
+ 	if err != nil {
+ 		return err
+ 	}
+diff --git a/hscontrol/state/state.go b/hscontrol/state/state.go
+index 293e6ba..2f43e70 100644
+--- a/hscontrol/state/state.go
++++ b/hscontrol/state/state.go
+@@ -141,6 +141,10 @@ type sshCheckPair struct {
+ // See [policy.PolicyManager] for policy evaluation and [NodeStore] for the
+ // in-memory node cache.
+ type State struct {
++	// TKA publishes only committed identities. Set once before Serve.
++	TKAMu        sync.Mutex
++	TKAReconcile func(context.Context, types.NodeID, []byte) error
++
+ 	// cfg holds the current Headscale configuration
+ 	cfg *types.Config
+ 
+@@ -342,6 +346,7 @@ func (s *State) DERPMap() tailcfg.DERPMapView {
+ // ReloadPolicy reloads the access control policy and triggers auto-approval if changed.
+ // Returns the resulting [change.Change] slice when the policy or routes changed.
+ func (s *State) ReloadPolicy() ([]change.Change, error) {
++	defer s.lockTKA()()
+ 	pol, err := hsdb.PolicyBytes(s.db.DB, s.cfg)
+ 	if err != nil {
+ 		return nil, fmt.Errorf("loading policy: %w", err)
+@@ -471,6 +476,7 @@ func (s *State) UpdateUser(userID types.UserID, updateFn func(*types.User) error
+ // It also updates the policy manager to ensure ACL policies referencing the deleted
+ // user are re-evaluated immediately, fixing issue #2967.
+ func (s *State) DeleteUser(userID types.UserID) (change.Change, error) {
++	defer s.lockTKA()()
+ 	err := s.db.DestroyUser(userID)
+ 	if err != nil {
+ 		return change.Change{}, err
+@@ -599,6 +605,7 @@ func (s *State) persistNodeAndRefreshPolicy(node types.NodeView) (types.NodeView
+ }
+ 
+ func (s *State) SaveNode(node types.NodeView) (types.NodeView, change.Change, error) {
++	defer s.lockTKA()()
+ 	// Update [NodeStore] first
+ 	nodePtr := node.AsStruct()
+ 
+@@ -614,6 +621,7 @@ func (s *State) SaveNode(node types.NodeView) (types.NodeView, change.Change, er
+ // must publish the changes before handling the error so live sessions are
+ // still torn down after a committed deletion.
+ func (s *State) DeleteNode(node types.NodeView) ([]change.Change, error) {
++	defer s.lockTKA()()
+ 	s.persistMu.Lock()
+ 
+ 	err := s.db.DeleteNode(node.AsStruct())
+@@ -702,6 +710,7 @@ func (s *State) Connect(id types.NodeID) ([]change.Change, uint64) {
+ // [NodeStore.UpdateNode] closure, making them atomic against
+ // concurrent connects. epoch identifies the session for logging only.
+ func (s *State) Disconnect(id types.NodeID, epoch uint64) ([]change.Change, error) {
++	defer s.lockTKA()()
+ 	var wentOffline bool
+ 
+ 	node, ok := s.nodeStore.UpdateNode(id, func(n *types.Node) {
+@@ -912,6 +921,7 @@ func (s *State) ListEphemeralNodes() views.Slice[types.NodeView] {
+ // SetNodeExpiry updates the expiration time for a node.
+ // If expiry is nil, the node's expiry is disabled (node will never expire).
+ func (s *State) SetNodeExpiry(nodeID types.NodeID, expiry *time.Time) (types.NodeView, change.Change, error) {
++	defer s.lockTKA()()
+ 	var onlineChanged bool
+ 
+ 	// Update [NodeStore] before database to ensure consistency. The [NodeStore] update
+@@ -958,6 +968,7 @@ func (s *State) SetNodeExpiry(nodeID types.NodeID, expiry *time.Time) (types.Nod
+ // Once a node is tagged, it cannot be un-tagged (only tags can be changed).
+ // Setting tags clears UserID since tagged nodes are owned by their tags.
+ func (s *State) SetNodeTags(nodeID types.NodeID, tags []string) (types.NodeView, change.Change, error) {
++	defer s.lockTKA()()
+ 	if len(tags) == 0 {
+ 		return types.NodeView{}, change.Change{}, types.ErrCannotRemoveAllTags
+ 	}
+@@ -1022,6 +1033,11 @@ func (s *State) SetNodeTags(nodeID types.NodeID, tags []string) (types.NodeView,
+ 
+ // SetApprovedRoutes sets the network routes that a node is approved to advertise.
+ func (s *State) SetApprovedRoutes(nodeID types.NodeID, routes []netip.Prefix) (types.NodeView, change.Change, error) {
++	defer s.lockTKA()()
++	return s.setApprovedRoutes(nodeID, routes)
++}
++
++func (s *State) setApprovedRoutes(nodeID types.NodeID, routes []netip.Prefix) (types.NodeView, change.Change, error) {
+ 	// TODO(kradalby): In principle we should call the AutoApprove logic here
+ 	// because even if the CLI removes an auto-approved route, it will be added
+ 	// back automatically.
+@@ -1062,6 +1078,7 @@ func (s *State) SetApprovedRoutes(nodeID types.NodeID, routes []netip.Prefix) (t
+ // auto-sanitisation) and collisions error out rather than silently
+ // bumping a user-facing label. See HOSTNAME.md for the CLI contract.
+ func (s *State) RenameNode(nodeID types.NodeID, newName string) (types.NodeView, change.Change, error) {
++	defer s.lockTKA()()
+ 	// Validate the label AND that the resulting FQDN fits MaxHostnameLength:
+ 	// a valid 63-char label can still overflow under a long base_domain, and
+ 	// an unmappable name would break this node and its peers (issue #3346).
+@@ -1653,6 +1670,8 @@ type newNodeParams struct {
+ 	User           types.User
+ 	MachineKey     key.MachinePublic
+ 	NodeKey        key.NodePublic
++	TKAKey         key.NLPublic
++	TKASignature   []byte
+ 	DiscoKey       key.DiscoPublic
+ 	Hostname       string
+ 	Hostinfo       *tailcfg.Hostinfo
+@@ -1747,13 +1766,16 @@ func (s *State) applyAuthNodeUpdate(params authNodeUpdateParams) (types.NodeView
+ 	// re-authenticating node could rotate its key to a victim's and poison
+ 	// the NodeStore NodeKey index (denying the victim service).
+ 	if existing, ok := s.nodeStore.GetNodeByNodeKey(regData.NodeKey); ok &&
+-		existing.MachineKey() != regData.MachineKey {
++		(existing.MachineKey() != regData.MachineKey ||
++			(s.TKAReconcile != nil && existing.ID() != params.ExistingNode.ID())) {
+ 		return types.NodeView{}, false, ErrNodeKeyInUse
+ 	}
+ 
+ 	// Update existing node in [NodeStore] - validation passed, safe to mutate
+ 	before, updatedNodeView, ok := s.nodeStore.UpdateNodeDiff(params.ExistingNode.ID(), func(node *types.Node) {
+ 		node.NodeKey = regData.NodeKey
++		node.TKAKey = regData.TKAKey
++		node.TKASignature = slices.Clone(regData.TKASignature)
+ 		node.DiscoKey = regData.DiscoKey
+ 		node.Hostname = params.Hostname
+ 
+@@ -1859,9 +1881,9 @@ func (s *State) applyAuthNodeUpdate(params authNodeUpdateParams) (types.NodeView
+ 	// is garbage-collected. Writing NULL can never cause an FK error, so include
+ 	// the column only in that clearing case; the other transitions keep the
+ 	// #2862-safe column set untouched.
+-	updateColumns := nodeUpdateColumns
++	updateColumns := append(slices.Clone(nodeUpdateColumns), "TKAKey", "TKASignature")
+ 	if !updatedNodeView.AuthKeyID().Valid() {
+-		updateColumns = append(slices.Clone(nodeUpdateColumns), "AuthKeyID")
++		updateColumns = append(updateColumns, "AuthKeyID")
+ 	}
+ 
+ 	_, err := hsdb.Write(s.db.DB, func(tx *gorm.DB) (*types.Node, error) {
+@@ -1873,6 +1895,7 @@ func (s *State) applyAuthNodeUpdate(params authNodeUpdateParams) (types.NodeView
+ 		return nil, nil //nolint:nilnil // side-effect only write
+ 	})
+ 	if err != nil {
++		s.nodeStore.PutNode(*before.AsStruct())
+ 		return types.NodeView{}, false, err
+ 	}
+ 
+@@ -1893,6 +1916,20 @@ func (s *State) applyAuthNodeUpdate(params authNodeUpdateParams) (types.NodeView
+ // createAndSaveNewNode creates a new node, allocates IPs, saves to DB, and adds to [NodeStore].
+ // It preserves netinfo from an existing node if one is provided (for faster DERP connectivity).
+ func (s *State) createAndSaveNewNode(params newNodeParams) (types.NodeView, error) {
++	if s.TKAReconcile != nil {
++		nodes, err := s.TKACommittedNodes(context.Background())
++		if err != nil {
++			return types.NodeView{}, err
++		}
++		if len(nodes) >= 64 || params.TKAKey.IsZero() {
++			return types.NodeView{}, errors.New("omnet registration requires NLKey and capacity below 64")
++		}
++		for _, n := range nodes {
++			if n.NodeKey == params.NodeKey {
++				return types.NodeView{}, ErrNodeKeyInUse
++			}
++		}
++	}
+ 	// Preserve NetInfo from existing node if available
+ 	if params.Hostinfo != nil {
+ 		params.Hostinfo.NetInfo = preserveNetInfo(
+@@ -1921,6 +1958,8 @@ func (s *State) createAndSaveNewNode(params newNodeParams) (types.NodeView, erro
+ 		Hostname:       params.Hostname,
+ 		MachineKey:     params.MachineKey,
+ 		NodeKey:        params.NodeKey,
++		TKAKey:         params.TKAKey,
++		TKASignature:   slices.Clone(params.TKASignature),
+ 		DiscoKey:       params.DiscoKey,
+ 		Hostinfo:       params.Hostinfo,
+ 		Endpoints:      params.Endpoints,
+@@ -2213,6 +2252,7 @@ func (s *State) HandleNodeFromAuthPath(
+ 	expiry *time.Time,
+ 	registrationMethod string,
+ ) (types.NodeView, change.Change, error) {
++	defer s.lockTKA()()
+ 	// Get the registration entry from cache
+ 	regEntry, ok := s.GetAuthCacheEntry(authID)
+ 	if !ok {
+@@ -2342,12 +2382,6 @@ func (s *State) HandleNodeFromAuthPath(
+ 		}
+ 	}
+ 
+-	// Signal to waiting clients
+-	regEntry.FinishAuth(types.AuthVerdict{Node: finalNode})
+-
+-	// Remove from registration cache
+-	s.authCache.Remove(authID)
+-
+ 	// Update policy managers
+ 	usersChange, err := s.updatePolicyManagerUsers()
+ 	if err != nil {
+@@ -2358,6 +2392,16 @@ func (s *State) HandleNodeFromAuthPath(
+ 	if err != nil {
+ 		return finalNode, change.NodeAdded(finalNode.ID()), fmt.Errorf("updating policy manager nodes: %w", err)
+ 	}
++	if err := s.reconcileTKA(finalNode.ID(), regData.TKASignature); err != nil {
++		regEntry.FinishAuth(types.AuthVerdict{Err: err})
++		return types.NodeView{}, change.Change{}, err
++	}
++
++	// Signal to waiting clients
++	regEntry.FinishAuth(types.AuthVerdict{Node: finalNode})
++
++	// Remove from registration cache
++	s.authCache.Remove(authID)
+ 
+ 	policyChanged := !usersChange.IsEmpty() || !nodesChange.IsEmpty()
+ 
+@@ -2388,6 +2432,8 @@ func (s *State) createNewNodeFromAuth(
+ 		User:                   *user,
+ 		MachineKey:             regData.MachineKey,
+ 		NodeKey:                regData.NodeKey,
++		TKAKey:                 regData.TKAKey,
++		TKASignature:           regData.TKASignature,
+ 		DiscoKey:               regData.DiscoKey,
+ 		Hostname:               hostname,
+ 		Hostinfo:               validHostinfo,
+@@ -2467,6 +2513,7 @@ func (s *State) HandleNodeFromPreAuthKey(
+ 	regReq tailcfg.RegisterRequest,
+ 	machineKey key.MachinePublic,
+ ) (types.NodeView, change.Change, error) {
++	defer s.lockTKA()()
+ 	// Serialise registration for this machine so concurrent restarts resolve
+ 	// to a single node rather than racing the find-then-create section.
+ 	defer s.lockRegistration(machineKey)()
+@@ -2609,7 +2656,8 @@ func (s *State) HandleNodeFromPreAuthKey(
+ 		// re-registering node could rotate its key to a victim's and poison the
+ 		// NodeStore NodeKey index, denying the victim service.
+ 		if existing, ok := s.nodeStore.GetNodeByNodeKey(regReq.NodeKey); ok &&
+-			existing.MachineKey() != machineKey {
++			(existing.MachineKey() != machineKey ||
++				(s.TKAReconcile != nil && existing.ID() != existingNodeSameUser.ID())) {
+ 			return types.NodeView{}, change.Change{}, ErrNodeKeyInUse
+ 		}
+ 
+@@ -2622,6 +2670,8 @@ func (s *State) HandleNodeFromPreAuthKey(
+ 		// Update existing node - NodeStore first, then database
+ 		before, updatedNodeView, ok := s.nodeStore.UpdateNodeDiff(existingNodeSameUser.ID(), func(node *types.Node) {
+ 			node.NodeKey = regReq.NodeKey
++			node.TKAKey = regReq.NLKey
++			node.TKASignature = slices.Clone(regReq.NodeKeySignature)
+ 			node.Hostname = hostname
+ 
+ 			// TODO(kradalby): We should ensure we use the same hostinfo and node merge semantics
+@@ -2707,7 +2757,7 @@ func (s *State) HandleNodeFromPreAuthKey(
+ 			// (#2862), but re-registration presents a freshly-validated key, so
+ 			// its ID must be persisted here — otherwise a restart reloads the old
+ 			// key and any key-scoped property (e.g. Ephemeral) silently reverts.
+-			reregColumns := append(slices.Clone(nodeUpdateColumns), "AuthKeyID")
++			reregColumns := append(slices.Clone(nodeUpdateColumns), "AuthKeyID", "TKAKey", "TKASignature")
+ 
+ 			err := tx.Select(reregColumns).Updates(updatedNodeView.AsStruct()).Error
+ 			if err != nil {
+@@ -2817,6 +2867,8 @@ func (s *State) HandleNodeFromPreAuthKey(
+ 			User:                   pakUser,
+ 			MachineKey:             machineKey,
+ 			NodeKey:                regReq.NodeKey,
++			TKAKey:                 regReq.NLKey,
++			TKASignature:           regReq.NodeKeySignature,
+ 			DiscoKey:               key.DiscoPublic{}, // DiscoKey not available in RegisterRequest
+ 			Hostname:               hostname,
+ 			Hostinfo:               validHostinfo,
+@@ -2841,6 +2893,9 @@ func (s *State) HandleNodeFromPreAuthKey(
+ 	if err != nil {
+ 		return finalNode, change.NodeAdded(finalNode.ID()), fmt.Errorf("updating policy manager nodes: %w", err)
+ 	}
++	if err := s.reconcileTKA(finalNode.ID(), regReq.NodeKeySignature); err != nil {
++		return types.NodeView{}, change.Change{}, err
++	}
+ 
+ 	policyChanged := !usersChange.IsEmpty() || !nodesChange.IsEmpty()
+ 
+@@ -3076,6 +3131,13 @@ func isAutoDerivedGivenName(given, hostname string) bool {
+ // the mapRequestDelta classification, and (if the policy reads it)
+ // [types.NodeView.HasPolicyChange].
+ func (s *State) UpdateNodeFromMapRequest(id types.NodeID, req tailcfg.MapRequest) (change.Change, error) { //nolint:gocyclo // central map-request reconciliation; the sequential branch flow reads clearer as one function than split across helpers
++	defer s.lockTKA()()
++	if s.TKAReconcile != nil {
++		current, ok := s.GetNodeByID(id)
++		if !ok || current.NodeKey() != req.NodeKey {
++			return change.Change{}, errors.New("stale map node identity")
++		}
++	}
+ 	log.Trace().
+ 		Caller().
+ 		Uint64(zf.NodeID, id.Uint64()).
+@@ -3273,7 +3335,7 @@ func (s *State) UpdateNodeFromMapRequest(id types.NodeID, req tailcfg.MapRequest
+ 		// TODO(kradalby): approval should ride the map request write above.
+ 		// Writing it separately costs a second NodeStore write and a second
+ 		// peer-map rebuild for one request.
+-		_, c, err := s.SetApprovedRoutes(id, autoApprovedRoutes)
++		_, c, err := s.setApprovedRoutes(id, autoApprovedRoutes)
+ 		if err != nil {
+ 			return change.Change{}, fmt.Errorf("persisting auto-approved routes: %w", err)
+ 		}
+diff --git a/hscontrol/state/tka.go b/hscontrol/state/tka.go
+new file mode 100644
+index 0000000..0c2454a
+--- /dev/null
++++ b/hscontrol/state/tka.go
+@@ -0,0 +1,128 @@
++package state
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"slices"
++	"time"
++
++	"github.com/juanfont/headscale/hscontrol/types"
++	"gorm.io/gorm"
++	"tailscale.com/tailcfg"
++	"tailscale.com/types/key"
++)
++
++// lockTKA is the publication barrier for identity-changing state operations.
++// The optional callback is configured once, before any server goroutines start.
++func (s *State) lockTKA() func() {
++	if s.TKAReconcile == nil {
++		return func() {}
++	}
++	s.TKAMu.Lock()
++	return s.TKAMu.Unlock
++}
++
++func (s *State) reconcileTKA(id types.NodeID, signature []byte) error {
++	if s.TKAReconcile == nil {
++		return nil
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
++	defer cancel()
++	return s.TKAReconcile(ctx, id, signature)
++}
++
++// TKACheckRevision records the latest observed transport revision under TKAMu.
++// It catches empty/older snapshot replacement after restart. It cannot identify
++// an arbitrary different authority with a higher revision; same UID is trusted.
++func (s *State) TKACheckRevision(ctx context.Context, revision uint64) error {
++	var checkpoint types.OmnetCheckpoint
++	err := s.db.DB.WithContext(ctx).First(&checkpoint, 1).Error
++	if errors.Is(err, gorm.ErrRecordNotFound) {
++		return s.db.DB.WithContext(ctx).Create(&types.OmnetCheckpoint{ID: 1, Revision: revision}).Error
++	}
++	if err != nil {
++		return err
++	}
++	if revision < checkpoint.Revision {
++		return errors.New("omnet authority revision regressed")
++	}
++	if revision == checkpoint.Revision {
++		return nil
++	}
++	return s.db.DB.WithContext(ctx).Model(&checkpoint).Update("revision", revision).Error
++}
++
++// TKACommittedNodes must be called under TKAMu. It deliberately reads SQL,
++// not NodeStore: upstream registration can update NodeStore before SQL commits.
++// Limit+1 detects capacity exhaustion without truncating the frozen roster.
++func (s *State) TKACommittedNodes(ctx context.Context) ([]types.Node, error) {
++	var nodes []types.Node
++	if err := s.db.DB.WithContext(ctx).Preload("User").Order("id").Limit(65).Find(&nodes).Error; err != nil {
++		return nil, err
++	}
++	if len(nodes) > 64 {
++		return nil, errors.New("omnet registry exceeds 64 nodes")
++	}
++	seen := make(map[key.NodePublic]bool, len(nodes))
++	for _, n := range nodes {
++		if n.ID == 0 || n.ID > 1<<63-1 || seen[n.NodeKey] || n.NodeKey.IsZero() {
++			return nil, errors.New("omnet ambiguous committed identity")
++		}
++		seen[n.NodeKey] = true
++		cached, ok := s.GetNodeByID(n.ID)
++		if !ok || cached.NodeKey() != n.NodeKey || cached.MachineKey() != n.MachineKey ||
++			cached.TypedUserID() != n.View().TypedUserID() || !slices.Equal(cached.Tags().AsSlice(), n.Tags) {
++			return nil, errors.New("omnet uncommitted node identity")
++		}
++	}
++	return nodes, nil
++}
++
++// TKAAcknowledge clears only the durable forwarding outbox after Omega accepts
++// it, readback proves acceptance, or a definitive rejection is reconciled by a
++// successful unsigned upsert. Caller holds TKAMu; accepted signatures stay in Omega.
++func (s *State) TKAAcknowledge(ctx context.Context, n types.Node) error {
++	if len(n.TKASignature) == 0 {
++		return nil
++	}
++	if err := s.db.DB.WithContext(ctx).Model(&types.Node{}).Where("id = ?", n.ID).
++		Update("tka_signature", nil).Error; err != nil {
++		return err
++	}
++	s.nodeStore.UpdateNode(n.ID, func(current *types.Node) { current.TKASignature = nil })
++	return nil
++}
++
++// TKARegisterCurrent refreshes authenticated registration metadata, including
++// upstream's no-auth same-key restart fast path. It never grants ownership.
++func (s *State) TKARegisterCurrent(ctx context.Context, req tailcfg.RegisterRequest, machine key.MachinePublic) error {
++	defer s.lockTKA()()
++	nodes, err := s.TKACommittedNodes(ctx)
++	if err != nil {
++		return err
++	}
++	for _, n := range nodes {
++		if n.NodeKey != req.NodeKey {
++			continue
++		}
++		if n.MachineKey != machine || req.NLKey.IsZero() {
++			return errors.New("omnet registration identity mismatch")
++		}
++		if n.TKAKey != req.NLKey || (len(req.NodeKeySignature) != 0 && !bytes.Equal(n.TKASignature, req.NodeKeySignature)) {
++			n.TKAKey = req.NLKey
++			if len(req.NodeKeySignature) != 0 {
++				n.TKASignature = slices.Clone(req.NodeKeySignature)
++			}
++			if err := s.db.DB.WithContext(ctx).Select("TKAKey", "TKASignature").Updates(&n).Error; err != nil {
++				return err
++			}
++			s.nodeStore.UpdateNode(n.ID, func(current *types.Node) {
++				current.TKAKey = n.TKAKey
++				current.TKASignature = slices.Clone(n.TKASignature)
++			})
++		}
++		return s.reconcileTKA(n.ID, req.NodeKeySignature)
++	}
++	return errors.New("omnet registered identity missing")
++}
+diff --git a/hscontrol/state/tka_test.go b/hscontrol/state/tka_test.go
+new file mode 100644
+index 0000000..d952634
+--- /dev/null
++++ b/hscontrol/state/tka_test.go
+@@ -0,0 +1,283 @@
++package state
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"testing"
++
++	"github.com/juanfont/headscale/hscontrol/types"
++	"github.com/stretchr/testify/require"
++	"tailscale.com/tailcfg"
++	"tailscale.com/types/key"
++)
++
++func TestOmnetRegistrationOutboxSurvivesReconcileFailureAndRestart(t *testing.T) {
++	path, s, id := persistTestSetup(t)
++	old, err := s.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	owner := types.UserID(*old.UserID)
++	pak, err := s.CreatePreAuthKey(&owner, true, false, nil, nil)
++	require.NoError(t, err)
++	req := tailcfg.RegisterRequest{
++		NodeKey: key.NewNode().Public(), NLKey: key.NewNLPrivate().Public(),
++		NodeKeySignature: []byte("untrusted-pending-signature"),
++		Auth:             &tailcfg.RegisterResponseAuth{AuthKey: pak.Key},
++		Hostinfo:         &tailcfg.Hostinfo{Hostname: "outbox-node"},
++	}
++	outage := errors.New("injected daemon outage")
++	called := false
++	s.TKAReconcile = func(ctx context.Context, _ types.NodeID, _ []byte) error {
++		called = true
++		nodes, err := s.TKACommittedNodes(ctx)
++		require.NoError(t, err)
++		require.Len(t, nodes, 1)
++		require.Equal(t, req.NodeKey, nodes[0].NodeKey)
++		require.Equal(t, req.NLKey, nodes[0].TKAKey)
++		require.Equal(t, []byte(req.NodeKeySignature), nodes[0].TKASignature)
++		return outage
++	}
++	_, _, err = s.HandleNodeFromPreAuthKey(req, old.MachineKey)
++	require.ErrorIs(t, err, outage)
++	require.True(t, called)
++	require.NoError(t, s.Close())
++	restarted := persistTestReopen(t, path)
++	durable, err := restarted.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	require.Equal(t, req.NLKey, durable.TKAKey)
++	require.Equal(t, req.NodeKey, durable.NodeKey)
++	require.Equal(t, []byte(req.NodeKeySignature), durable.TKASignature)
++	// Accepted readback or definitive rejection followed by unsigned upsert clears the outbox.
++	restarted.TKAMu.Lock()
++	require.NoError(t, restarted.TKAAcknowledge(context.Background(), *durable))
++	restarted.TKAMu.Unlock()
++	durable, err = restarted.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	require.Empty(t, durable.TKASignature)
++}
++
++func TestOmnetStaleMapCannotUndoRotation(t *testing.T) {
++	_, s, id := persistTestSetup(t)
++	defer s.Close()
++	old, err := s.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	s.TKAReconcile = func(context.Context, types.NodeID, []byte) error { return nil }
++	owner := types.UserID(*old.UserID)
++	pak, err := s.CreatePreAuthKey(&owner, true, false, nil, nil)
++	require.NoError(t, err)
++	req := tailcfg.RegisterRequest{
++		NodeKey: key.NewNode().Public(), NLKey: key.NewNLPrivate().Public(),
++		Auth:     &tailcfg.RegisterResponseAuth{AuthKey: pak.Key},
++		Hostinfo: &tailcfg.Hostinfo{Hostname: old.Hostname},
++	}
++	_, _, err = s.HandleNodeFromPreAuthKey(req, old.MachineKey)
++	require.NoError(t, err)
++	_, err = s.UpdateNodeFromMapRequest(id, tailcfg.MapRequest{NodeKey: old.NodeKey})
++	require.ErrorContains(t, err, "stale map node identity")
++	current, err := s.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	require.Equal(t, req.NodeKey, current.NodeKey)
++}
++
++func TestOmnetCommittedRosterRejectsSpeculativeIdentity(t *testing.T) {
++	_, s, id := persistTestSetup(t)
++	defer s.Close()
++	s.TKAReconcile = func(context.Context, types.NodeID, []byte) error { return nil }
++	s.nodeStore.UpdateNode(id, func(n *types.Node) { n.NodeKey = key.NewNode().Public() })
++	s.TKAMu.Lock()
++	_, err := s.TKACommittedNodes(context.Background())
++	s.TKAMu.Unlock()
++	require.ErrorContains(t, err, "uncommitted node identity")
++}
++
++func TestOmnetCommittedRosterRejectsDuplicateNodeKeys(t *testing.T) {
++	_, s, id := persistTestSetup(t)
++	defer s.Close()
++	first, err := s.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	second := s.DB().CreateRegisteredNodeForTest(first.User, "duplicate-key")
++	second.NodeKey = first.NodeKey
++	require.NoError(t, s.DB().DB.Select("NodeKey").Updates(second).Error)
++	s.nodeStore.PutNode(*second)
++	s.TKAMu.Lock()
++	_, err = s.TKACommittedNodes(context.Background())
++	s.TKAMu.Unlock()
++	require.ErrorContains(t, err, "ambiguous committed identity")
++}
++
++func TestOmnetRevisionFloorSurvivesAdapterRestart(t *testing.T) {
++	path, s, _ := persistTestSetup(t)
++	s.TKAMu.Lock()
++	require.NoError(t, s.TKACheckRevision(context.Background(), 19))
++	require.NoError(t, s.TKACheckRevision(context.Background(), 19))
++	s.TKAMu.Unlock()
++	require.NoError(t, s.Close())
++	restarted := persistTestReopen(t, path)
++	restarted.TKAMu.Lock()
++	defer restarted.TKAMu.Unlock()
++	require.ErrorContains(t, restarted.TKACheckRevision(context.Background(), 0), "revision regressed")
++	require.ErrorContains(t, restarted.TKACheckRevision(context.Background(), 18), "revision regressed")
++	require.NoError(t, restarted.TKACheckRevision(context.Background(), 20))
++	var checkpoint types.OmnetCheckpoint
++	require.NoError(t, restarted.DB().DB.First(&checkpoint, 1).Error)
++	require.Equal(t, uint64(20), checkpoint.Revision)
++}
++
++func TestOmnetInteractiveCallbackPersistsBeforeAuthCompletion(t *testing.T) {
++	_, s, id := persistTestSetup(t)
++	defer s.Close()
++	old, err := s.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	data := &types.RegistrationData{
++		MachineKey:   old.MachineKey,
++		NodeKey:      key.NewNode().Public(),
++		TKAKey:       key.NewNLPrivate().Public(),
++		TKASignature: []byte("interactive-pending-signature"),
++		Hostname:     old.Hostname,
++		Hostinfo:     &tailcfg.Hostinfo{Hostname: old.Hostname},
++	}
++	authID := types.MustAuthID()
++	request := types.NewRegisterAuthRequest(data)
++	s.SetAuthCacheEntry(authID, request)
++	outage := errors.New("interactive forwarding outage")
++	s.TKAReconcile = func(ctx context.Context, _ types.NodeID, _ []byte) error {
++		// This is the real callback boundary, after SQL commit but before
++		// FinishAuth can report success to the waiting stock client.
++		nodes, err := s.TKACommittedNodes(ctx)
++		require.NoError(t, err)
++		require.Len(t, nodes, 1)
++		require.Equal(t, data.NodeKey, nodes[0].NodeKey)
++		require.Equal(t, data.TKAKey, nodes[0].TKAKey)
++		require.Equal(t, data.TKASignature, nodes[0].TKASignature)
++		select {
++		case <-request.WaitForAuth():
++			t.Fatal("interactive authentication completed before reconciliation")
++		default:
++		}
++		return outage
++	}
++	_, _, err = s.HandleNodeFromAuthPath(authID, types.UserID(*old.UserID), nil, "oidc")
++	require.ErrorIs(t, err, outage)
++	verdict := <-request.WaitForAuth()
++	require.ErrorIs(t, verdict.Err, outage)
++	require.False(t, verdict.Node.Valid())
++	stored, err := s.DB().GetNodeByID(id)
++	require.NoError(t, err)
++	require.Equal(t, data.TKAKey, stored.TKAKey)
++	require.Equal(t, data.TKASignature, stored.TKASignature)
++}
++
++func TestOmnetSameMachineCannotDuplicateNodeKeyAcrossUsers(t *testing.T) {
++	for _, interactive := range []bool{false, true} {
++		for _, existingTarget := range []bool{false, true} {
++			t.Run(fmt.Sprintf("interactive=%t/existing=%t", interactive, existingTarget), func(t *testing.T) {
++				_, s, id := persistTestSetup(t)
++				defer s.Close()
++				first, err := s.DB().GetNodeByID(id)
++				require.NoError(t, err)
++				first.TKAKey = key.NewNLPrivate().Public()
++				require.NoError(t, s.DB().DB.Save(first).Error)
++				s.nodeStore.PutNode(*first)
++				secondUser := s.CreateUserForTest("duplicate-target")
++				var second *types.Node
++				if existingTarget {
++					second = s.CreateRegisteredNodeForTest(secondUser, "existing-target")
++					second.MachineKey = first.MachineKey
++					second.TKAKey = key.NewNLPrivate().Public()
++					require.NoError(t, s.DB().DB.Save(second).Error)
++					s.nodeStore.PutNode(*second)
++				}
++				s.TKAReconcile = func(context.Context, types.NodeID, []byte) error {
++					t.Error("duplicate identity reached post-commit reconciliation")
++					return nil
++				}
++				if interactive {
++					id := types.MustAuthID()
++					s.SetAuthCacheEntry(id, types.NewRegisterAuthRequest(&types.RegistrationData{
++						MachineKey: first.MachineKey, NodeKey: first.NodeKey,
++						TKAKey: key.NewNLPrivate().Public(), Hostname: "duplicate-target",
++						Hostinfo: &tailcfg.Hostinfo{Hostname: "duplicate-target"},
++					}))
++					_, _, err = s.HandleNodeFromAuthPath(id, types.UserID(secondUser.ID), nil, "oidc")
++				} else {
++					pak, pakErr := s.CreatePreAuthKey(secondUser.TypedID(), true, false, nil, nil)
++					require.NoError(t, pakErr)
++					_, _, err = s.HandleNodeFromPreAuthKey(tailcfg.RegisterRequest{
++						NodeKey: first.NodeKey, NLKey: key.NewNLPrivate().Public(),
++						Auth:     &tailcfg.RegisterResponseAuth{AuthKey: pak.Key},
++						Hostinfo: &tailcfg.Hostinfo{Hostname: "duplicate-target"},
++					}, first.MachineKey)
++				}
++				require.ErrorIs(t, err, ErrNodeKeyInUse)
++				s.TKAMu.Lock()
++				nodes, err := s.TKACommittedNodes(context.Background())
++				s.TKAMu.Unlock()
++				require.NoError(t, err, "refusal must leave a coherent unique roster")
++				wantCount := 1
++				if existingTarget {
++					wantCount = 2
++					stored, err := s.DB().GetNodeByID(second.ID)
++					require.NoError(t, err)
++					require.Equal(t, second.NodeKey, stored.NodeKey)
++				}
++				require.Len(t, nodes, wantCount)
++				stored, err := s.DB().GetNodeByID(first.ID)
++				require.NoError(t, err)
++				require.Equal(t, first.NodeKey, stored.NodeKey)
++				require.Equal(t, first.UserID, stored.UserID)
++			})
++		}
++	}
++}
++
++func TestOmnetReconcileFailureStillRefreshesCommittedPolicy(t *testing.T) {
++	for _, interactive := range []bool{false, true} {
++		t.Run(fmt.Sprintf("interactive=%t", interactive), func(t *testing.T) {
++			_, s, _ := persistTestSetup(t)
++			defer s.Close()
++			user := s.CreateUserForTest("outage-owner")
++			require.NoError(t, s.UpdatePolicyManagerUsersForTest())
++			_, err := s.SetPolicy([]byte(`{"grants":[{"src":["outage-owner@"],"dst":["*"],"ip":["*"]}]}`))
++			require.NoError(t, err)
++			before, _ := s.Filter()
++			outage := errors.New("injected post-commit outage")
++			var committedID types.NodeID
++			s.TKAReconcile = func(_ context.Context, id types.NodeID, _ []byte) error {
++				committedID = id
++				return outage
++			}
++			req := tailcfg.RegisterRequest{
++				NodeKey: key.NewNode().Public(), NLKey: key.NewNLPrivate().Public(),
++				Hostinfo: &tailcfg.Hostinfo{Hostname: "policy-outage-node"},
++			}
++			machine := key.NewMachine().Public()
++			if interactive {
++				id := types.MustAuthID()
++				request := types.NewRegisterAuthRequest(&types.RegistrationData{
++					MachineKey: machine, NodeKey: req.NodeKey, TKAKey: req.NLKey,
++					Hostname: req.Hostinfo.Hostname, Hostinfo: req.Hostinfo,
++				})
++				s.SetAuthCacheEntry(id, request)
++				_, _, err = s.HandleNodeFromAuthPath(id, types.UserID(user.ID), nil, "oidc")
++				require.ErrorIs(t, (<-request.WaitForAuth()).Err, outage)
++			} else {
++				pak, pakErr := s.CreatePreAuthKey(user.TypedID(), true, false, nil, nil)
++				require.NoError(t, pakErr)
++				req.Auth = &tailcfg.RegisterResponseAuth{AuthKey: pak.Key}
++				_, _, err = s.HandleNodeFromPreAuthKey(req, machine)
++			}
++			require.ErrorIs(t, err, outage)
++			stored, err := s.DB().GetNodeByID(committedID)
++			require.NoError(t, err)
++			require.Equal(t, req.NodeKey, stored.NodeKey)
++			after, _ := s.Filter()
++			require.NotEqual(t, before, after, "ACL sources must include the committed user node despite IPC failure")
++			usersChange, err := s.updatePolicyManagerUsers()
++			require.NoError(t, err)
++			nodesChange, err := s.updatePolicyManagerNodes()
++			require.NoError(t, err)
++			require.True(t, usersChange.IsEmpty())
++			require.True(t, nodesChange.IsEmpty(), "an unrelated later event must not be needed to heal policy")
++		})
++	}
++}
+diff --git a/hscontrol/tkad.go b/hscontrol/tkad.go
+new file mode 100644
+index 0000000..307282f
+--- /dev/null
++++ b/hscontrol/tkad.go
+@@ -0,0 +1,617 @@
++package hscontrol
++
++import (
++	"bytes"
++	"context"
++	"encoding/binary"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"maps"
++	"net"
++	"net/http"
++	"os"
++	"path/filepath"
++	"slices"
++	"strconv"
++	"sync"
++	"time"
++
++	"github.com/go-chi/chi/v5"
++	"github.com/juanfont/headscale/hscontrol/types"
++	"github.com/juanfont/headscale/hscontrol/types/change"
++	"github.com/rs/zerolog/log"
++	"tailscale.com/tailcfg"
++	"tailscale.com/types/key"
++)
++
++const tkaBodyLimit = 65536
++
++// Reserve enough JSON space for the largest registry tuple and base64 expansion.
++const tkaSignatureLimit = (tkaBodyLimit - 512) / 4 * 3
++const tkaTimeout = 8 * time.Second
++
++var errTKAUnavailable = errors.New("omnet authority unavailable or registration pending")
++
++// This is transport glue. Omega alone parses TKA RPCs, verifies signatures,
++// chooses authority state and decides enablement/disablement. The local socket
++// profile trusts the same UID; it is not a separate-UID security boundary.
++type tkaAdapter struct {
++	h            *Headscale
++	socket       string
++	owner        uint64
++	revision     uint64 // accessed under State.TKAMu
++	haveRevision bool
++	healthMu     sync.Mutex
++	failed       chan struct{}
++	healthy      bool
++}
++
++type tkaRegistryNode struct {
++	NodeID         types.NodeID
++	NodePublic     key.NodePublic
++	RotationPubkey []byte
++	KeySignature   []byte
++}
++
++type tkaSnapshot struct {
++	TKAInfo  *tailcfg.TKAInfo
++	Revision uint64
++	Nodes    []tkaRegistryNode
++}
++
++func (h *Headscale) initTKA() error {
++	socket, ownerText := os.Getenv("OMNET_TKAD_SOCKET"), os.Getenv("OMNET_TKAD_ADMIN_USER_ID")
++	if socket == "" && ownerText == "" {
++		return nil
++	}
++	owner, err := strconv.ParseUint(ownerText, 10, 64)
++	if err != nil || owner == 0 || !filepath.IsAbs(socket) {
++		return errors.New("OMNET_TKAD_SOCKET must be absolute and OMNET_TKAD_ADMIN_USER_ID must be positive")
++	}
++	a := &tkaAdapter{h: h, socket: socket, owner: owner, failed: make(chan struct{}), healthy: true}
++	h.tkad = a
++	h.state.TKAReconcile = a.reconcileRegistration
++	h.state.TKAMu.Lock()
++	defer h.state.TKAMu.Unlock()
++	ctx, cancel := context.WithTimeout(context.Background(), tkaTimeout)
++	defer cancel()
++	if _, err := a.readSnapshot(ctx); err != nil {
++		return err
++	}
++	if _, _, err := a.reconcile(ctx); err != nil {
++		// Keep control available for authenticated retries/admin deletion,
++		// but no map or TKA RPC may pass the reconciliation barrier.
++		log.Warn().Err(err).Msg("omnet registry pending; control publication blocked")
++	}
++	return nil
++}
++
++func (a *tkaAdapter) health(ok bool) {
++	a.healthMu.Lock()
++	defer a.healthMu.Unlock()
++	if !ok && a.healthy {
++		close(a.failed)
++	} else if ok && !a.healthy {
++		a.failed = make(chan struct{})
++	}
++	a.healthy = ok
++}
++
++func (h *Headscale) tkaFailure() <-chan struct{} {
++	if h.tkad == nil {
++		return nil
++	}
++	h.tkad.healthMu.Lock()
++	defer h.tkad.healthMu.Unlock()
++	return h.tkad.failed
++}
++
++// rpc exchanges one bounded, deadline-limited IPC frame. A lost reply is not
++// a rollback indication; durable registration outboxes are reconciled by read.
++func (a *tkaAdapter) rpc(ctx context.Context, route byte, admin bool, nodeID types.NodeID, body []byte) (_ int, _ []byte, retErr error) {
++	if len(body) > tkaBodyLimit {
++		return 0, nil, errors.New("omnet request too large")
++	}
++	parent := ctx
++	defer func() {
++		if retErr != nil && parent.Err() == nil {
++			a.health(false)
++		}
++	}()
++	ctx, cancel := context.WithTimeout(ctx, tkaTimeout)
++	defer cancel()
++	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", a.socket)
++	if err != nil {
++		return 0, nil, errTKAUnavailable
++	}
++	defer conn.Close()
++	deadline, _ := ctx.Deadline()
++	if err := conn.SetDeadline(deadline); err != nil {
++		return 0, nil, errTKAUnavailable
++	}
++	var header [20]byte
++	copy(header[:4], "TKA\x01")
++	header[4] = route
++	if admin {
++		header[5] = 1
++	}
++	binary.LittleEndian.PutUint64(header[8:16], uint64(nodeID))
++	binary.LittleEndian.PutUint32(header[16:20], uint32(len(body)))
++	for _, part := range [][]byte{header[:], body} {
++		for len(part) > 0 {
++			n, err := conn.Write(part)
++			if err != nil || n == 0 {
++				return 0, nil, errTKAUnavailable
++			}
++			part = part[n:]
++		}
++	}
++	var response [12]byte
++	if _, err := io.ReadFull(conn, response[:]); err != nil {
++		return 0, nil, errTKAUnavailable
++	}
++	status := int(binary.LittleEndian.Uint16(response[4:6]))
++	length := binary.LittleEndian.Uint32(response[8:12])
++	if string(response[:4]) != "TKA\x01" || response[6] != 0 || response[7] != 0 ||
++		length > tkaBodyLimit || status < 200 || status > 599 {
++		return 0, nil, errTKAUnavailable
++	}
++	result := make([]byte, int(length))
++	if _, err := io.ReadFull(conn, result); err != nil {
++		return 0, nil, errTKAUnavailable
++	}
++	return status, result, nil
++}
++
++func (a *tkaAdapter) readSnapshot(ctx context.Context) (*tkaSnapshot, error) {
++	status, body, err := a.rpc(ctx, 11, true, 0, []byte("{}"))
++	if err != nil || status != http.StatusOK {
++		return nil, errTKAUnavailable
++	}
++	var wire struct {
++		TKAInfo  json.RawMessage
++		Revision *uint64
++		Nodes    *[]tkaRegistryNode
++	}
++	if err := json.Unmarshal(body, &wire); err != nil || wire.Revision == nil ||
++		wire.Nodes == nil || len(wire.TKAInfo) == 0 || len(*wire.Nodes) > 64 {
++		return nil, errTKAUnavailable
++	}
++	snap := tkaSnapshot{Revision: *wire.Revision, Nodes: *wire.Nodes}
++	if err := json.Unmarshal(wire.TKAInfo, &snap.TKAInfo); err != nil {
++		return nil, errTKAUnavailable
++	}
++	seen := make(map[types.NodeID]bool, len(snap.Nodes))
++	keys := make(map[key.NodePublic]bool, len(snap.Nodes))
++	for _, n := range snap.Nodes {
++		if n.NodeID == 0 || n.NodeID > 1<<63-1 || n.NodePublic.IsZero() ||
++			len(n.RotationPubkey) != 32 || seen[n.NodeID] || keys[n.NodePublic] {
++			return nil, errTKAUnavailable
++		}
++		seen[n.NodeID], keys[n.NodePublic] = true, true
++	}
++	if a.haveRevision && snap.Revision < a.revision {
++		return nil, errors.New("omnet authority revision regressed")
++	}
++	if err := a.h.state.TKACheckRevision(ctx, snap.Revision); err != nil {
++		return nil, err
++	}
++	return &snap, nil
++}
++
++// reconcile runs under the shared identity/publication barrier. SQL is the
++// desired registry; Omega is the only accepted-signature store. Exact reads
++// suppress unchanged writes, so adapter restart preserves pending init.
++func (a *tkaAdapter) reconcile(ctx context.Context) (_ *tkaSnapshot, _ []types.Node, retErr error) {
++	if err := ctx.Err(); err != nil {
++		return nil, nil, err
++	}
++	// A disconnected requester cannot cancel a shared persistence/publication
++	// barrier and thereby declare the daemon unhealthy for every other node.
++	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tkaTimeout)
++	defer cancel()
++	defer func() { a.health(retErr == nil) }()
++	nodes, err := a.h.state.TKACommittedNodes(ctx)
++	if err != nil {
++		return nil, nil, err
++	}
++	snap, err := a.readSnapshot(ctx)
++	if err != nil {
++		return nil, nil, err
++	}
++	current := make(map[types.NodeID]tkaRegistryNode, len(snap.Nodes))
++	desired := make(map[types.NodeID]key.NodePublic, len(nodes))
++	for _, n := range snap.Nodes {
++		current[n.NodeID] = n
++	}
++	for _, n := range nodes {
++		desired[n.ID] = n.NodeKey
++		if n.TKAKey.IsZero() {
++			return nil, nil, errors.New("omnet node lacks authenticated NLKey; re-register it")
++		}
++	}
++	mutated := false
++	// Vacate all obsolete keys before claiming any desired key, including
++	// cycles after an outage. A changed key cannot retain its old signature.
++	for _, n := range snap.Nodes {
++		if desired[n.NodeID] == n.NodePublic {
++			continue
++		}
++		body, _ := json.Marshal(struct{ NodeID types.NodeID }{n.NodeID})
++		status, _, err := a.rpc(ctx, 10, true, 0, body)
++		if err != nil || status != http.StatusOK {
++			return nil, nil, errTKAUnavailable
++		}
++		mutated = true
++		delete(current, n.NodeID)
++	}
++	for _, n := range nodes {
++		old, found := current[n.ID]
++		tupleMatches := found && old.NodePublic == n.NodeKey && bytes.Equal(old.RotationPubkey, n.TKAKey.Verifier())
++		sigMatches := len(n.TKASignature) == 0 || bytes.Equal(old.KeySignature, n.TKASignature)
++		if !tupleMatches || !sigMatches {
++			upsert := struct {
++				NodeID         types.NodeID
++				NodeKey        key.NodePublic
++				RotationPubkey []byte
++				Signature      []byte `json:",omitempty"`
++			}{n.ID, n.NodeKey, n.TKAKey.Verifier(), n.TKASignature}
++			body, err := json.Marshal(upsert)
++			if err != nil {
++				return nil, nil, err
++			}
++			status := http.StatusRequestEntityTooLarge
++			if len(body) <= tkaBodyLimit {
++				status, _, err = a.rpc(ctx, 9, true, 0, body)
++			}
++			if err != nil {
++				// A lost reply may have committed. Preserve the outbox until
++				// accepted readback or a definitive response resolves it.
++				return nil, nil, err
++			}
++			if len(upsert.Signature) != 0 && (status == http.StatusBadRequest ||
++				status == http.StatusForbidden || status == http.StatusConflict ||
++				(status == http.StatusRequestEntityTooLarge && len(body) > tkaBodyLimit)) {
++				// These are the pinned daemon's invalid/malformed/inactive
++				// signature responses. Require an unsigned upsert to succeed:
++				// an admin/identity rejection must not be reported as success.
++				// Same-key omission preserves Omega's accepted signature;
++				// a changed key becomes unsigned, never authorized by this glue.
++				upsert.Signature = nil
++				body, err = json.Marshal(upsert)
++				if err != nil {
++					return nil, nil, err
++				}
++				status, _, err = a.rpc(ctx, 9, true, 0, body)
++			}
++			if err != nil || status != http.StatusOK {
++				return nil, nil, errTKAUnavailable
++			}
++			mutated = true
++		}
++		if err := a.h.state.TKAAcknowledge(ctx, n); err != nil {
++			return nil, nil, err
++		}
++	}
++	if mutated {
++		snap, err = a.readSnapshot(ctx)
++		if err != nil {
++			return nil, nil, err
++		}
++	}
++	if !a.haveRevision || snap.Revision != a.revision {
++		a.revision, a.haveRevision = snap.Revision, true
++		if a.h.mapBatcher != nil {
++			a.h.Change(change.FullUpdate())
++		}
++	}
++	return snap, nodes, nil
++}
++
++// Registration success must not conceal a rejected submitted signature. An
++// unrelated node's rejected outbox does not fail this caller or global health.
++func (a *tkaAdapter) reconcileRegistration(ctx context.Context, id types.NodeID, signature []byte) error {
++	snap, _, err := a.reconcile(ctx)
++	if err != nil || len(signature) == 0 {
++		return err
++	}
++	for _, n := range snap.Nodes {
++		if n.NodeID == id && bytes.Equal(n.KeySignature, signature) {
++			return nil
++		}
++	}
++	// Authentication may already have committed ownership/policy changes even
++	// when the same-key unsigned retry leaves Omega's revision unchanged.
++	if a.h.mapBatcher != nil {
++		a.h.Change(change.FullUpdate())
++	}
++	return errors.New("omnet rejected node key signature")
++}
++
++func (h *Headscale) watchTKA(ctx context.Context) {
++	if h.tkad == nil {
++		return
++	}
++	ticker := time.NewTicker(time.Second)
++	defer ticker.Stop()
++	for {
++		select {
++		case <-ctx.Done():
++			return
++		case <-ticker.C:
++			h.state.TKAMu.Lock()
++			checkCtx, cancel := context.WithTimeout(ctx, tkaTimeout)
++			_, _, _ = h.tkad.reconcile(checkCtx)
++			cancel()
++			h.state.TKAMu.Unlock()
++		}
++	}
++}
++
++func (ns *noiseServer) tkaRoutes(r chi.Router) {
++	for route, path := range []string{"/init/begin", "/init/finish", "/bootstrap", "/sync/offer", "/sync/send", "/disable", "/sign", "/affected-sigs"} {
++		r.Get("/tka"+path, func(w http.ResponseWriter, req *http.Request) { ns.tkaRPC(w, req, byte(route+1)) })
++	}
++}
++
++func (ns *noiseServer) tkaRPC(w http.ResponseWriter, req *http.Request, route byte) {
++	a := ns.headscale.tkad
++	if a == nil {
++		http.Error(w, "omnet not configured", http.StatusServiceUnavailable)
++		return
++	}
++	controller := http.NewResponseController(w)
++	_ = controller.SetReadDeadline(time.Now().Add(tkaTimeout))
++	body, err := io.ReadAll(io.LimitReader(req.Body, tkaBodyLimit+1))
++	_ = controller.SetReadDeadline(time.Time{})
++	if err != nil || len(body) > tkaBodyLimit {
++		http.Error(w, "invalid omnet body", http.StatusRequestEntityTooLarge)
++		return
++	}
++	// This decode selects an identity only. The original bytes are forwarded
++	// unchanged; Omega independently rejects duplicate fields and binds NodeKey.
++	var selector struct{ NodeKey key.NodePublic }
++	if json.Unmarshal(body, &selector) != nil || selector.NodeKey.IsZero() {
++		http.Error(w, "invalid omnet identity", http.StatusBadRequest)
++		return
++	}
++	status, reply, err := func() (int, []byte, error) {
++		a.h.state.TKAMu.Lock()
++		defer a.h.state.TKAMu.Unlock()
++		if err := req.Context().Err(); err != nil {
++			return http.StatusServiceUnavailable, nil, err
++		}
++		ctx, cancel := context.WithTimeout(context.WithoutCancel(req.Context()), tkaTimeout)
++		defer cancel()
++		_, nodes, err := a.reconcile(ctx)
++		if err != nil {
++			return http.StatusServiceUnavailable, nil, errTKAUnavailable
++		}
++		var caller *types.Node
++		for i := range nodes {
++			if nodes[i].NodeKey == selector.NodeKey && nodes[i].MachineKey == ns.machineKey {
++				caller = &nodes[i]
++			}
++		}
++		if caller == nil {
++			return http.StatusUnauthorized, nil, errors.New("unauthorized omnet identity")
++		}
++		admin := !caller.IsExpired() && !caller.IsTagged() && caller.UserID != nil && uint64(*caller.UserID) == a.owner
++		status, reply, err := a.rpc(ctx, route, admin, caller.ID, body)
++		if err != nil {
++			// This is our detached IPC deadline, not caller cancellation.
++			// A lost mutation reply must stop publication until readback.
++			a.health(false)
++			return http.StatusServiceUnavailable, nil, errTKAUnavailable
++		}
++		// A successful mutation is not retried because notification fails.
++		if status == http.StatusOK && a.h.mapBatcher != nil {
++			a.h.Change(change.FullUpdate())
++		}
++		return status, reply, nil
++	}()
++	_ = controller.SetWriteDeadline(time.Now().Add(tkaTimeout))
++	defer controller.SetWriteDeadline(time.Time{})
++	if err != nil {
++		http.Error(w, err.Error(), status)
++		return
++	}
++	w.Header().Set("Content-Type", "application/json")
++	w.WriteHeader(status)
++	_, _ = w.Write(reply)
++}
++
++// registrationPrelude supplies the stock client's two-step signature challenge
++// before upstream authentication. Possession of the old Noise identity never
++// substitutes for interactive reauthentication, including for unexpired nodes.
++func (h *Headscale) registrationPrelude(ctx context.Context, req tailcfg.RegisterRequest, machine key.MachinePublic) (*tailcfg.RegisterResponse, error) {
++	if h.tkad == nil {
++		return nil, nil
++	}
++	if req.NodeKey.IsZero() || req.NLKey.IsZero() || len(req.NodeKeySignature) > tkaSignatureLimit {
++		return nil, errors.New("omnet requires nonzero NodeKey, NLKey and bounded signature")
++	}
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	h.state.TKAMu.Lock()
++	defer h.state.TKAMu.Unlock()
++	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tkaTimeout)
++	defer cancel()
++	snap, err := h.tkad.readSnapshot(ctx)
++	if err != nil {
++		h.tkad.health(false)
++		return nil, err
++	}
++	nodes, err := h.state.TKACommittedNodes(ctx)
++	if err != nil {
++		return nil, err
++	}
++	for _, n := range nodes {
++		if n.NodeKey != req.OldNodeKey || n.NodeKey == req.NodeKey {
++			continue
++		}
++		if n.MachineKey != machine {
++			return nil, errors.New("omnet old node belongs to another Noise identity")
++		}
++		for _, stored := range snap.Nodes {
++			if stored.NodeID == n.ID && stored.NodePublic == n.NodeKey &&
++				len(stored.KeySignature) > 0 && len(req.NodeKeySignature) == 0 {
++				return &tailcfg.RegisterResponse{NodeKeySignature: stored.KeySignature}, nil
++			}
++		}
++	}
++	return nil, nil
++}
++
++func (h *Headscale) tkaMapReady(ctx context.Context) error {
++	if h.tkad == nil {
++		return nil
++	}
++	h.state.TKAMu.Lock()
++	defer h.state.TKAMu.Unlock()
++	ctx, cancel := context.WithTimeout(ctx, tkaTimeout)
++	defer cancel()
++	_, _, err := h.tkad.reconcile(ctx)
++	return err
++}
++
++// encodeTKAMap is the last publication barrier, including already queued maps.
++// A stale key or stale authenticated session closes the stream instead of
++// pairing an old identity with a current signature (or publishing a fallback).
++func (m *mapSession) encodeTKAMap(msg *tailcfg.MapResponse) ([]byte, error) {
++	a := m.h.tkad
++	m.h.state.TKAMu.Lock()
++	defer m.h.state.TKAMu.Unlock()
++	ctx, cancel := context.WithTimeout(m.ctx, tkaTimeout)
++	defer cancel()
++	snap, nodes, err := a.reconcile(ctx)
++	if err != nil {
++		return nil, err
++	}
++	validSession := false
++	for _, n := range nodes {
++		if n.ID == m.node.ID && n.NodeKey == m.req.NodeKey && n.MachineKey == m.node.MachineKey {
++			validSession = true
++		}
++	}
++	if !validSession {
++		return nil, errors.New("stale omnet map session")
++	}
++	// A PeerChange cannot clear a previous signature with nil. Rebuild key
++	// patches as full nodes, including an unsigned rotation, before publication.
++	for _, patch := range msg.PeersChangedPatch {
++		if patch.Key != nil {
++			full, err := m.h.mapBatcher.FullMapResponse(m.node.ID, m.capVer)
++			if err != nil {
++				return nil, err
++			}
++			full.PingRequest = msg.PingRequest
++			msg = full
++			break
++		}
++	}
++	copyNode := func(n *tailcfg.Node) *tailcfg.Node {
++		if n == nil {
++			return nil
++		}
++		copied := *n
++		return &copied
++	}
++	out := new(tailcfg.MapResponse)
++	*out = *msg
++	out.Node = copyNode(msg.Node)
++	out.Peers = slices.Clone(msg.Peers)
++	for i, n := range out.Peers {
++		out.Peers[i] = copyNode(n)
++	}
++	out.PeersChanged = slices.Clone(msg.PeersChanged)
++	for i, n := range out.PeersChanged {
++		out.PeersChanged[i] = copyNode(n)
++	}
++	out.PeersChangedPatch = slices.Clone(msg.PeersChangedPatch)
++	for i, patch := range out.PeersChangedPatch {
++		copied := *patch
++		out.PeersChangedPatch[i] = &copied
++	}
++	out.TKAInfo = snap.TKAInfo
++	registry := make(map[types.NodeID]tkaRegistryNode, len(snap.Nodes))
++	for _, n := range snap.Nodes {
++		registry[n.NodeID] = n
++	}
++	decorate := func(n *tailcfg.Node) error {
++		if n == nil {
++			return nil
++		}
++		stored, ok := registry[types.NodeID(n.ID)]
++		if !ok || stored.NodePublic != n.Key {
++			return errors.New("stale omnet map node")
++		}
++		n.KeySignature = stored.KeySignature
++		return nil
++	}
++	if err := decorate(out.Node); err != nil {
++		return nil, err
++	}
++	if out.Node != nil {
++		out.Node.CapMap = maps.Clone(out.Node.CapMap)
++		if out.Node.CapMap == nil {
++			out.Node.CapMap = make(tailcfg.NodeCapMap)
++		}
++		out.Node.CapMap[tailcfg.CapabilityTailnetLock] = nil
++	}
++	for _, n := range out.Peers {
++		if err := decorate(n); err != nil {
++			return nil, err
++		}
++	}
++	for _, n := range out.PeersChanged {
++		if err := decorate(n); err != nil {
++			return nil, err
++		}
++	}
++	for _, patch := range out.PeersChangedPatch {
++		if _, ok := registry[types.NodeID(patch.NodeID)]; !ok {
++			return nil, errors.New("stale omnet map patch")
++		}
++		// A non-key patch may be queued behind a rotation. It cannot safely
++		// attach the new key's signature to the client's previous key.
++		patch.KeySignature = nil
++	}
++	return encodeMapResponse(m.req.Compress, out)
++}
++
++// Each session's poll loop is a single writer, preserving frame order. The
++// coherent frame is frozen under TKAMu, but no client I/O holds the barrier.
++func (m *mapSession) writeTKAMap(msg *tailcfg.MapResponse) error {
++	if m.h.tkad == nil {
++		return writeMapResponse(m.w, m.req.Compress, m.isStreaming(), msg)
++	}
++	frame, err := m.encodeTKAMap(msg)
++	if err != nil {
++		return err
++	}
++	m.writeDeadlineMu.Lock()
++	if m.cancelChClosed.Load() {
++		m.writeDeadlineMu.Unlock()
++		return errMapSessionStopped
++	}
++	if err := m.ctx.Err(); err != nil {
++		m.writeDeadlineMu.Unlock()
++		return err
++	}
++	controller := http.NewResponseController(m.w)
++	err = controller.SetWriteDeadline(time.Now().Add(tkaTimeout))
++	m.writeDeadlineMu.Unlock()
++	if err != nil && !errors.Is(err, http.ErrNotSupported) {
++		return fmt.Errorf("omnet write deadline: %w", err)
++	}
++	defer func() {
++		m.writeDeadlineMu.Lock()
++		defer m.writeDeadlineMu.Unlock()
++		_ = controller.SetWriteDeadline(time.Time{})
++	}()
++	return writeMapFrame(m.w, m.isStreaming(), frame)
++}
+diff --git a/hscontrol/tkad_test.go b/hscontrol/tkad_test.go
+new file mode 100644
+index 0000000..37497a0
+--- /dev/null
++++ b/hscontrol/tkad_test.go
+@@ -0,0 +1,726 @@
++package hscontrol
++
++import (
++	"bytes"
++	"context"
++	"encoding/binary"
++	"encoding/json"
++	"fmt"
++	"io"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"path/filepath"
++	"slices"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/go-chi/chi/v5"
++	"github.com/juanfont/headscale/hscontrol/types"
++	"github.com/stretchr/testify/require"
++	"tailscale.com/tailcfg"
++	"tailscale.com/types/key"
++)
++
++// This fixture tests glue only. Real Omega protocol/security behavior is
++// exercised by Omnet's native daemon suite and stock-client E2E, not simulated.
++type omnetFixture struct {
++	mu              sync.Mutex
++	snapshot        tkaSnapshot
++	writes          int
++	calls           []byte
++	lastHeader      [20]byte
++	badRead         bool
++	rejectSignature int
++	rejectUnsigned  int
++	dropReplyRoute  byte
++	beforeReply     func(byte)
++}
++
++func omnetSocket(t *testing.T, f *omnetFixture) string {
++	t.Helper()
++	path := filepath.Join(t.TempDir(), "t.sock")
++	listener, err := net.Listen("unix", path)
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = listener.Close() })
++	go func() {
++		for {
++			conn, err := listener.Accept()
++			if err != nil {
++				return
++			}
++			func() {
++				defer conn.Close()
++				var hdr [20]byte
++				if _, err := io.ReadFull(conn, hdr[:]); err != nil {
++					return
++				}
++				length := binary.LittleEndian.Uint32(hdr[16:20])
++				if length > tkaBodyLimit {
++					return
++				}
++				body := make([]byte, length)
++				if _, err := io.ReadFull(conn, body); err != nil {
++					return
++				}
++				f.mu.Lock()
++				defer f.mu.Unlock()
++				f.calls = append(f.calls, hdr[4])
++				reply := []byte("{\"opaque\":true}")
++				status := http.StatusOK
++				switch hdr[4] {
++				case 9:
++					var n struct {
++						NodeID         types.NodeID
++						NodeKey        key.NodePublic
++						RotationPubkey []byte
++						Signature      []byte
++					}
++					if json.Unmarshal(body, &n) != nil {
++						return
++					}
++					if len(n.Signature) != 0 && f.rejectSignature != 0 {
++						status = f.rejectSignature
++						break
++					}
++					if len(n.Signature) == 0 && f.rejectUnsigned != 0 {
++						status = f.rejectUnsigned
++						break
++					}
++					if slices.ContainsFunc(f.snapshot.Nodes, func(x tkaRegistryNode) bool {
++						return x.NodeID != n.NodeID && x.NodePublic == n.NodeKey
++					}) {
++						status = http.StatusConflict
++						break
++					}
++					oldIndex := slices.IndexFunc(f.snapshot.Nodes, func(x tkaRegistryNode) bool { return x.NodeID == n.NodeID })
++					newNode := tkaRegistryNode{n.NodeID, n.NodeKey, n.RotationPubkey, n.Signature}
++					if oldIndex >= 0 {
++						old := f.snapshot.Nodes[oldIndex]
++						if len(n.Signature) == 0 && old.NodePublic == n.NodeKey {
++							newNode.KeySignature = old.KeySignature
++						}
++						f.snapshot.Nodes[oldIndex] = newNode
++					} else {
++						f.snapshot.Nodes = append(f.snapshot.Nodes, newNode)
++					}
++					f.writes++
++					f.snapshot.Revision++
++				case 10:
++					var n struct{ NodeID types.NodeID }
++					if json.Unmarshal(body, &n) != nil {
++						return
++					}
++					f.snapshot.Nodes = slices.DeleteFunc(f.snapshot.Nodes, func(x tkaRegistryNode) bool { return x.NodeID == n.NodeID })
++					f.writes++
++					f.snapshot.Revision++
++				case 11:
++					reply, _ = json.Marshal(f.snapshot)
++					if f.badRead {
++						reply = []byte("{}")
++					}
++				default:
++					f.lastHeader = hdr
++					if (hdr[4] == 1 || hdr[4] == 2 || hdr[4] == 6) && hdr[5] == 0 {
++						status = http.StatusForbidden
++					}
++				}
++				if f.beforeReply != nil {
++					f.beforeReply(hdr[4])
++				}
++				if f.dropReplyRoute == hdr[4] {
++					f.dropReplyRoute = 0
++					return
++				}
++				var response [12]byte
++				copy(response[:], "TKA\x01")
++				binary.LittleEndian.PutUint16(response[4:6], uint16(status))
++				binary.LittleEndian.PutUint32(response[8:], uint32(len(reply)))
++				_, _ = conn.Write(response[:])
++				_, _ = conn.Write(reply)
++			}()
++		}
++	}()
++	return path
++}
++
++func omnetApp(t *testing.T) (*Headscale, types.Node, *omnetFixture) {
++	t.Helper()
++	h := createTestApp(t)
++	user := h.state.CreateUserForTest("omnet-owner")
++	n := h.state.CreateRegisteredNodeForTest(user, "omnet-node")
++	n.TKAKey = key.NewNLPrivate().Public()
++	require.NoError(t, h.state.DB().DB.Save(n).Error)
++	h.state.PutNodeInStoreForTest(*n)
++	f := &omnetFixture{snapshot: tkaSnapshot{Revision: 7, Nodes: []tkaRegistryNode{{n.ID, n.NodeKey, n.TKAKey.Verifier(), []byte("accepted-signature")}}}}
++	a := &tkaAdapter{h: h, socket: omnetSocket(t, f), owner: uint64(user.ID), failed: make(chan struct{}), healthy: true}
++	h.tkad = a
++	h.state.TKAReconcile = a.reconcileRegistration
++	return h, *n, f
++}
++
++func TestOmnetRawRoutesIdentityAndAdmin(t *testing.T) {
++	h, n, f := omnetApp(t)
++	ns := &noiseServer{headscale: h, machineKey: n.MachineKey}
++	router := chi.NewRouter()
++	ns.tkaRoutes(router)
++	body := []byte(fmt.Sprintf(" { \"NodeKey\": %q, \"unknown\": [1,2] }\n", n.NodeKey.String()))
++	w := httptest.NewRecorder()
++	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/tka/init/begin", bytes.NewReader(body)))
++	require.Equal(t, http.StatusOK, w.Code)
++	f.mu.Lock()
++	require.Equal(t, byte(1), f.lastHeader[5], "current owner receives admin assertion")
++	f.mu.Unlock()
++	ns.machineKey = key.NewMachine().Public()
++	w = httptest.NewRecorder()
++	ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), 1)
++	require.Equal(t, http.StatusUnauthorized, w.Code)
++	ns.machineKey = n.MachineKey
++	h.tkad.owner++
++	w = httptest.NewRecorder()
++	ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), 1)
++	f.mu.Lock()
++	require.Zero(t, f.lastHeader[5], "non-owner cannot assert admin")
++	f.mu.Unlock()
++}
++
++func TestOmnetRestartDoesNotRewriteRegistry(t *testing.T) {
++	h, _, f := omnetApp(t)
++	for range 2 {
++		h.state.TKAMu.Lock()
++		snapshot, _, err := h.tkad.reconcile(context.Background())
++		h.state.TKAMu.Unlock()
++		require.NoError(t, err)
++		require.Equal(t, uint64(7), snapshot.Revision)
++		// Drop adapter-only acknowledged revision state, as on restart.
++		h.tkad.haveRevision = false
++	}
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	require.Zero(t, f.writes, "unchanged registry must preserve a pending init")
++}
++
++func TestOmnetHistoricalOutboxReadbackAndOrphanRemoval(t *testing.T) {
++	h, n, f := omnetApp(t)
++	n.TKASignature = []byte("accepted-signature")
++	require.NoError(t, h.state.DB().DB.Save(&n).Error)
++	h.state.PutNodeInStoreForTest(n)
++	f.mu.Lock()
++	f.snapshot.Nodes = append(f.snapshot.Nodes, tkaRegistryNode{99, key.NewNode().Public(), key.NewNLPrivate().Public().Verifier(), nil})
++	f.mu.Unlock()
++	h.state.TKAMu.Lock()
++	_, _, err := h.tkad.reconcile(context.Background())
++	h.state.TKAMu.Unlock()
++	require.NoError(t, err)
++	stored, err := h.state.DB().GetNodeByID(n.ID)
++	require.NoError(t, err)
++	require.Empty(t, stored.TKASignature)
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	require.Equal(t, 1, f.writes, "only orphan deletion; historical signature must not be replayed")
++	require.NotContains(t, f.calls, byte(9))
++}
++
++func TestOmnetRotationChallengePrecedesKeyChange(t *testing.T) {
++	h, n, _ := omnetApp(t)
++	req := tailcfg.RegisterRequest{NodeKey: key.NewNode().Public(), OldNodeKey: n.NodeKey, NLKey: n.TKAKey}
++	resp, err := h.registrationPrelude(context.Background(), req, n.MachineKey)
++	require.NoError(t, err)
++	require.Equal(t, []byte("accepted-signature"), []byte(resp.NodeKeySignature))
++	stored, err := h.state.DB().GetNodeByID(n.ID)
++	require.NoError(t, err)
++	require.Equal(t, n.NodeKey, stored.NodeKey)
++	req.NodeKeySignature = []byte("resigned")
++	resp, err = h.registrationPrelude(context.Background(), req, n.MachineKey)
++	require.NoError(t, err)
++	require.Nil(t, resp, "signature challenge must fall through to upstream authentication")
++	resp, err = h.handleRegister(context.Background(), req, n.MachineKey)
++	require.NoError(t, err)
++	require.NotEmpty(t, resp.AuthURL)
++	require.False(t, resp.MachineAuthorized, "a re-signed key is not user authentication")
++	stored, err = h.state.DB().GetNodeByID(n.ID)
++	require.NoError(t, err)
++	require.Equal(t, n.NodeKey, stored.NodeKey, "key remains unchanged until upstream auth completes")
++	require.Empty(t, stored.TKASignature)
++}
++
++func TestOmnetMapSnapshotAndOutageFailClosed(t *testing.T) {
++	h, n, f := omnetApp(t)
++	w := httptest.NewRecorder()
++	m := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: n.NodeKey}, node: &n, w: w}
++	msg := &tailcfg.MapResponse{Node: &tailcfg.Node{ID: n.ID.NodeID(), Key: n.NodeKey}}
++	require.NoError(t, m.writeTKAMap(msg))
++	require.Empty(t, msg.Node.KeySignature, "wire decoration must not mutate shared mapper nodes")
++	wire := w.Body.Bytes()
++	var response tailcfg.MapResponse
++	require.NoError(t, json.Unmarshal(wire[4:], &response))
++	require.Equal(t, []byte("accepted-signature"), []byte(response.Node.KeySignature))
++	w.Body.Reset()
++	msg.Node.Key = key.NewNode().Public()
++	require.Error(t, m.writeTKAMap(msg))
++	require.Zero(t, w.Body.Len())
++	msg.Node.Key = n.NodeKey
++	failure := h.tkaFailure()
++	f.mu.Lock()
++	f.badRead = true
++	f.mu.Unlock()
++	require.Error(t, m.writeTKAMap(msg))
++	require.Zero(t, w.Body.Len())
++	select {
++	case <-failure:
++	default:
++		t.Fatal("daemon read failure must stop existing streams")
++	}
++}
++
++func TestOmnetUnsignedKeyPatchBecomesFullPeer(t *testing.T) {
++	h, self, f := omnetApp(t)
++	peerUser := h.state.CreateUserForTest("omnet-peer")
++	peer := h.state.CreateRegisteredNodeForTest(peerUser, "unsigned-rotated-peer")
++	peer.TKAKey = key.NewNLPrivate().Public()
++	require.NoError(t, h.state.DB().DB.Save(peer).Error)
++	h.state.PutNodeInStoreForTest(*peer)
++	require.NoError(t, h.state.UpdatePolicyManagerUsersForTest())
++	require.NoError(t, h.state.UpdatePolicyManagerNodesForTest())
++	f.mu.Lock()
++	f.snapshot.Nodes = append(f.snapshot.Nodes, tkaRegistryNode{peer.ID, peer.NodeKey, peer.TKAKey.Verifier(), nil})
++	f.mu.Unlock()
++	w := httptest.NewRecorder()
++	m := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: self.NodeKey}, node: &self, w: w}
++	msg := &tailcfg.MapResponse{PeersChangedPatch: []*tailcfg.PeerChange{{NodeID: peer.ID.NodeID(), Key: &peer.NodeKey}}}
++	require.NoError(t, m.writeTKAMap(msg))
++	var response tailcfg.MapResponse
++	require.NoError(t, json.Unmarshal(w.Body.Bytes()[4:], &response))
++	require.NotNil(t, response.Node)
++	require.Empty(t, response.PeersChangedPatch, "nil signature patch cannot clear prior signature")
++	found := false
++	for _, got := range response.Peers {
++		if got.ID == peer.ID.NodeID() {
++			found = true
++			require.Equal(t, peer.NodeKey, got.Key)
++			require.Empty(t, got.KeySignature)
++		}
++	}
++	require.True(t, found, "full unsigned node replaces prior signed peer")
++}
++
++func TestOmnetDeletedNoiseIdentityCannotReachAuthority(t *testing.T) {
++	h, n, f := omnetApp(t)
++	node, ok := h.state.GetNodeByID(n.ID)
++	require.True(t, ok)
++	_, err := h.state.DeleteNode(node)
++	require.NoError(t, err)
++	ns := &noiseServer{headscale: h, machineKey: n.MachineKey}
++	body := []byte(fmt.Sprintf("{\"NodeKey\":%q}", n.NodeKey.String()))
++	w := httptest.NewRecorder()
++	ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), 1)
++	require.Equal(t, http.StatusUnauthorized, w.Code)
++	f.mu.Lock()
++	defer f.mu.Unlock()
++	require.NotContains(t, f.calls, byte(1))
++	require.Empty(t, f.snapshot.Nodes, "deleted registry identity must be reconciled")
++}
++
++func TestOmnetRegistrationRejectsInvalidEnvelopeBeforePersistence(t *testing.T) {
++	for _, test := range []struct {
++		name          string
++		zeroKey       bool
++		signatureSize int
++	}{
++		{"zero-node-key", true, 1},
++		{"base64-overflow", false, tkaSignatureLimit + 1},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			h, n, f := omnetApp(t)
++			req := tailcfg.RegisterRequest{
++				OldNodeKey: n.NodeKey, NodeKey: key.NewNode().Public(), NLKey: n.TKAKey,
++				NodeKeySignature: make([]byte, test.signatureSize),
++			}
++			if test.zeroKey {
++				req.NodeKey = key.NodePublic{}
++			}
++			resp, err := h.registrationPrelude(context.Background(), req, n.MachineKey)
++			require.Error(t, err)
++			require.Nil(t, resp)
++			stored, err := h.state.DB().GetNodeByID(n.ID)
++			require.NoError(t, err)
++			require.Equal(t, n.NodeKey, stored.NodeKey)
++			require.Empty(t, stored.TKASignature)
++			f.mu.Lock()
++			require.Empty(t, f.calls, "invalid input is refused before IPC or SQL mutation")
++			f.mu.Unlock()
++		})
++	}
++}
++
++func TestOmnetExpiredOwnerCannotAdminister(t *testing.T) {
++	h, n, f := omnetApp(t)
++	expiry := time.Now().Add(-time.Minute)
++	n.Expiry = &expiry
++	require.NoError(t, h.state.DB().DB.Save(&n).Error)
++	h.state.PutNodeInStoreForTest(n)
++	ns := &noiseServer{headscale: h, machineKey: n.MachineKey}
++	body := []byte(fmt.Sprintf("{\"NodeKey\":%q}", n.NodeKey.String()))
++	for _, route := range []byte{1, 2, 6} {
++		w := httptest.NewRecorder()
++		ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), route)
++		require.Equal(t, http.StatusForbidden, w.Code)
++		f.mu.Lock()
++		require.Zero(t, f.lastHeader[5], "expired owner must not assert admin")
++		f.mu.Unlock()
++	}
++}
++
++func TestOmnetDefinitiveRejectedOutboxIsLocal(t *testing.T) {
++	for _, status := range []int{http.StatusBadRequest, http.StatusForbidden, http.StatusConflict, http.StatusRequestEntityTooLarge} {
++		for _, rotated := range []bool{false, true} {
++			t.Run(fmt.Sprintf("%d/rotated=%t", status, rotated), func(t *testing.T) {
++				h, n, f := omnetApp(t)
++				if rotated {
++					n.NodeKey = key.NewNode().Public()
++				}
++				n.TKASignature = []byte("rejected-pending-signature")
++				if status == http.StatusRequestEntityTooLarge {
++					// Legacy persisted data from before encoded-envelope validation.
++					n.TKASignature = make([]byte, tkaBodyLimit)
++				}
++				require.NoError(t, h.state.DB().DB.Save(&n).Error)
++				h.state.PutNodeInStoreForTest(n)
++				f.mu.Lock()
++				f.rejectSignature = status
++				f.mu.Unlock()
++				failure := h.tkaFailure()
++				h.state.TKAMu.Lock()
++				err := h.tkad.reconcileRegistration(context.Background(), n.ID, n.TKASignature)
++				h.state.TKAMu.Unlock()
++				require.ErrorContains(t, err, "rejected node key signature")
++				stored, err := h.state.DB().GetNodeByID(n.ID)
++				require.NoError(t, err)
++				require.Empty(t, stored.TKASignature, "clear only the rejected forwarding outbox")
++				cached, ok := h.state.GetNodeByID(n.ID)
++				require.True(t, ok)
++				require.Empty(t, cached.AsStruct().TKASignature)
++				require.NoError(t, h.tkaMapReady(context.Background()))
++				select {
++				case <-failure:
++					t.Fatal("a rejected node signature stopped unrelated streams")
++				default:
++				}
++				f.mu.Lock()
++				require.Len(t, f.snapshot.Nodes, 1)
++				require.Equal(t, n.NodeKey, f.snapshot.Nodes[0].NodePublic)
++				if rotated {
++					require.Empty(t, f.snapshot.Nodes[0].KeySignature)
++				} else {
++					require.Equal(t, []byte("accepted-signature"), f.snapshot.Nodes[0].KeySignature)
++				}
++				f.mu.Unlock()
++				w := httptest.NewRecorder()
++				m := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: n.NodeKey}, node: &n, w: w}
++				require.NoError(t, m.writeTKAMap(&tailcfg.MapResponse{Node: &tailcfg.Node{ID: n.ID.NodeID(), Key: n.NodeKey}}))
++			})
++		}
++	}
++}
++
++func TestOmnetRejectedRegistrationReportsErrorWithoutPoisoningPeers(t *testing.T) {
++	h, n, f := omnetApp(t)
++	peerUser := h.state.CreateUserForTest("unaffected-peer")
++	peer := h.state.CreateRegisteredNodeForTest(peerUser, "unaffected-peer")
++	peer.TKAKey = key.NewNLPrivate().Public()
++	require.NoError(t, h.state.DB().DB.Save(peer).Error)
++	h.state.PutNodeInStoreForTest(*peer)
++	f.mu.Lock()
++	f.rejectSignature = http.StatusForbidden
++	f.snapshot.Nodes = append(f.snapshot.Nodes, tkaRegistryNode{peer.ID, peer.NodeKey, peer.TKAKey.Verifier(), []byte("peer-accepted")})
++	f.mu.Unlock()
++	req := tailcfg.RegisterRequest{NodeKey: n.NodeKey, NLKey: n.TKAKey, NodeKeySignature: []byte("bad-signature")}
++	err := h.state.TKARegisterCurrent(context.Background(), req, n.MachineKey)
++	require.ErrorContains(t, err, "rejected node key signature")
++	require.NoError(t, h.tkaMapReady(context.Background()))
++	req.NodeKeySignature = nil
++	require.NoError(t, h.state.TKARegisterCurrent(context.Background(), req, n.MachineKey))
++	require.NoError(t, h.state.TKARegisterCurrent(context.Background(), tailcfg.RegisterRequest{
++		NodeKey: peer.NodeKey, NLKey: peer.TKAKey,
++	}, peer.MachineKey))
++	w := httptest.NewRecorder()
++	m := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: peer.NodeKey}, node: peer, w: w}
++	require.NoError(t, m.writeTKAMap(&tailcfg.MapResponse{Node: &tailcfg.Node{ID: peer.ID.NodeID(), Key: peer.NodeKey}}))
++	var response tailcfg.MapResponse
++	require.NoError(t, json.Unmarshal(w.Body.Bytes()[4:], &response))
++	require.Equal(t, []byte("peer-accepted"), []byte(response.Node.KeySignature))
++}
++
++func TestOmnetAmbiguousAndUnauthorizedOutboxesRemainFailClosed(t *testing.T) {
++	for _, test := range []struct {
++		name           string
++		signedStatus   int
++		unsignedStatus int
++		drop           bool
++	}{
++		{"lost-accepted-reply", 0, 0, true},
++		{"server-error", http.StatusInternalServerError, 0, false},
++		{"unauthenticated-ipc", http.StatusUnauthorized, 0, false},
++		{"admin-denied-even-unsigned", http.StatusForbidden, http.StatusForbidden, false},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			h, n, f := omnetApp(t)
++			n.TKASignature = []byte("pending")
++			require.NoError(t, h.state.DB().DB.Save(&n).Error)
++			h.state.PutNodeInStoreForTest(n)
++			f.mu.Lock()
++			f.rejectSignature, f.rejectUnsigned = test.signedStatus, test.unsignedStatus
++			if test.drop {
++				f.dropReplyRoute = 9
++			}
++			f.mu.Unlock()
++			failure := h.tkaFailure()
++			require.Error(t, h.tkaMapReady(context.Background()))
++			stored, err := h.state.DB().GetNodeByID(n.ID)
++			require.NoError(t, err)
++			require.Equal(t, n.TKASignature, stored.TKASignature)
++			select {
++			case <-failure:
++			default:
++				t.Fatal("unresolved transport/auth failure must block publication")
++			}
++			if test.drop {
++				require.NoError(t, h.tkaMapReady(context.Background()), "readback resolves a lost successful reply")
++				stored, err = h.state.DB().GetNodeByID(n.ID)
++				require.NoError(t, err)
++				require.Empty(t, stored.TKASignature)
++				f.mu.Lock()
++				require.Equal(t, 1, f.writes, "accepted readback must not replay")
++				f.mu.Unlock()
++			}
++		})
++	}
++}
++
++func TestOmnetCancelledClientDoesNotFailGlobalHealth(t *testing.T) {
++	h, n, f := omnetApp(t)
++	failure := h.tkaFailure()
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	w := httptest.NewRecorder()
++	m := &mapSession{h: h, ctx: ctx, req: tailcfg.MapRequest{NodeKey: n.NodeKey}, node: &n, w: w}
++	require.ErrorIs(t, m.writeTKAMap(&tailcfg.MapResponse{KeepAlive: true}), context.Canceled)
++	require.ErrorIs(t, h.tkaMapReady(ctx), context.Canceled)
++	_, _, err := h.tkad.rpc(ctx, 11, true, 0, []byte("{}"))
++	require.Error(t, err)
++	// Also disconnect after reconciliation has started a live daemon read.
++	ctx, cancel = context.WithCancel(context.Background())
++	m.ctx = ctx
++	started, release := make(chan struct{}), make(chan struct{})
++	var once sync.Once
++	f.mu.Lock()
++	f.beforeReply = func(route byte) {
++		if route == 11 {
++			once.Do(func() { close(started); <-release })
++		}
++	}
++	f.mu.Unlock()
++	done := make(chan error, 1)
++	go func() { done <- m.writeTKAMap(&tailcfg.MapResponse{KeepAlive: true}) }()
++	<-started
++	cancel()
++	close(release)
++	require.ErrorIs(t, <-done, context.Canceled)
++	require.Empty(t, w.Body.Bytes())
++	select {
++	case <-failure:
++		t.Fatal("client cancellation closed another client's failure channel")
++	default:
++	}
++	require.NoError(t, h.tkaMapReady(context.Background()))
++}
++
++func TestOmnetNonKeyPatchNeverCarriesCurrentSignature(t *testing.T) {
++	h, n, f := omnetApp(t)
++	f.mu.Lock()
++	f.snapshot.Nodes[0].KeySignature = []byte("new-key-signature")
++	f.mu.Unlock()
++	w := httptest.NewRecorder()
++	m := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: n.NodeKey}, node: &n, w: w}
++	msg := &tailcfg.MapResponse{PeersChangedPatch: []*tailcfg.PeerChange{{
++		NodeID: n.ID.NodeID(), KeySignature: []byte("queued-old-signature"),
++	}}}
++	require.NoError(t, m.writeTKAMap(msg))
++	var response tailcfg.MapResponse
++	require.NoError(t, json.Unmarshal(w.Body.Bytes()[4:], &response))
++	require.Len(t, response.PeersChangedPatch, 1)
++	require.Empty(t, response.PeersChangedPatch[0].KeySignature)
++	require.Equal(t, []byte("queued-old-signature"), []byte(msg.PeersChangedPatch[0].KeySignature))
++}
++
++type omnetBlockedWriter struct {
++	*httptest.ResponseRecorder
++	started   chan struct{}
++	release   chan struct{}
++	once      sync.Once
++	mu        sync.Mutex
++	deadlines []time.Time
++}
++
++func (w *omnetBlockedWriter) Write(p []byte) (int, error) {
++	w.once.Do(func() { close(w.started); <-w.release })
++	return w.ResponseRecorder.Write(p)
++}
++
++func (w *omnetBlockedWriter) SetWriteDeadline(deadline time.Time) error {
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	w.deadlines = append(w.deadlines, deadline)
++	return nil
++}
++
++func TestOmnetSlowWriterReleasesBarrierAndKeepsFrameOrder(t *testing.T) {
++	h, n, f := omnetApp(t)
++	w := &omnetBlockedWriter{ResponseRecorder: httptest.NewRecorder(), started: make(chan struct{}), release: make(chan struct{})}
++	m := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: n.NodeKey}, node: &n, w: w}
++	msg := &tailcfg.MapResponse{Node: &tailcfg.Node{ID: n.ID.NodeID(), Key: n.NodeKey}}
++	done := make(chan error, 1)
++	go func() { done <- m.writeTKAMap(msg) }()
++	<-w.started
++	locked := h.state.TKAMu.TryLock()
++	if !locked {
++		close(w.release)
++		<-done
++		t.Fatal("client write holds the global publication barrier")
++	}
++	f.mu.Lock()
++	f.snapshot.Nodes[0].KeySignature = []byte("new-snapshot")
++	f.snapshot.Revision++
++	f.mu.Unlock()
++	h.state.TKAMu.Unlock()
++	other := httptest.NewRecorder()
++	peer := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: n.NodeKey}, node: &n, w: other}
++	err := peer.writeTKAMap(msg)
++	close(w.release)
++	require.NoError(t, <-done)
++	require.NoError(t, err, "another client's write must complete while the first is blocked")
++	require.NoError(t, m.writeTKAMap(msg))
++	wire := w.Body.Bytes()
++	for _, signature := range []string{"accepted-signature", "new-snapshot"} {
++		require.GreaterOrEqual(t, len(wire), 4)
++		size := int(binary.LittleEndian.Uint32(wire[:4]))
++		require.GreaterOrEqual(t, len(wire), 4+size)
++		var response tailcfg.MapResponse
++		require.NoError(t, json.Unmarshal(wire[4:4+size], &response))
++		require.Equal(t, []byte(signature), []byte(response.Node.KeySignature))
++		wire = wire[4+size:]
++	}
++	require.Empty(t, wire)
++}
++
++func TestOmnetStoppedQueuedWriteCannotExtendStopDeadline(t *testing.T) {
++	h, n, _ := omnetApp(t)
++	w := &omnetBlockedWriter{ResponseRecorder: httptest.NewRecorder(), started: make(chan struct{}), release: make(chan struct{})}
++	close(w.release)
++	m := &mapSession{h: h, ctx: context.Background(), req: tailcfg.MapRequest{NodeKey: n.NodeKey}, node: &n, w: w, cancelCh: make(chan struct{})}
++	h.state.TKAMu.Lock()
++	done := make(chan error, 1)
++	go func() { done <- m.writeMap(&tailcfg.MapResponse{KeepAlive: true}) }()
++	require.Eventually(t, m.writing.Load, time.Second, time.Millisecond)
++	m.stopFromBatcher()
++	h.state.TKAMu.Unlock()
++	require.ErrorIs(t, <-done, errMapSessionStopped)
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	require.Len(t, w.deadlines, 1, "no later write may replace the stop deadline")
++	require.Empty(t, w.Body.Bytes())
++}
++
++func TestOmnetKeyReuseRecoveryVacatesAllKeysFirst(t *testing.T) {
++	for _, lostRemovalReply := range []bool{false, true} {
++		t.Run(fmt.Sprintf("lost-removal=%t", lostRemovalReply), func(t *testing.T) {
++			h, first, f := omnetApp(t)
++			otherUser := h.state.CreateUserForTest("reuse-peer")
++			second := h.state.CreateRegisteredNodeForTest(otherUser, "reuse-peer")
++			second.TKAKey = key.NewNLPrivate().Public()
++			oldFirst, oldSecond := first.NodeKey, second.NodeKey
++			f.mu.Lock()
++			f.snapshot.Nodes = append(f.snapshot.Nodes, tkaRegistryNode{second.ID, oldSecond, second.TKAKey.Verifier(), nil})
++			if lostRemovalReply {
++				f.dropReplyRoute = 10
++			}
++			f.mu.Unlock()
++			// A cycle is stronger than row ordering: neither key can be claimed
++			// until both old holders have been removed.
++			first.NodeKey, second.NodeKey = oldSecond, oldFirst
++			first.TKASignature, second.TKASignature = []byte("first-new"), []byte("second-new")
++			require.NoError(t, h.state.DB().DB.Save(&first).Error)
++			require.NoError(t, h.state.DB().DB.Save(second).Error)
++			h.state.PutNodeInStoreForTest(first)
++			h.state.PutNodeInStoreForTest(*second)
++			if lostRemovalReply {
++				require.Error(t, h.tkaMapReady(context.Background()))
++				stored, err := h.state.DB().GetNodeByID(first.ID)
++				require.NoError(t, err)
++				require.Equal(t, first.TKASignature, stored.TKASignature)
++			}
++			require.NoError(t, h.tkaMapReady(context.Background()))
++			f.mu.Lock()
++			require.Len(t, f.snapshot.Nodes, 2)
++			for _, got := range f.snapshot.Nodes {
++				want := first
++				if got.NodeID == second.ID {
++					want = *second
++				}
++				require.Equal(t, want.NodeKey, got.NodePublic)
++				require.Equal(t, want.TKASignature, got.KeySignature)
++			}
++			mutations := slices.DeleteFunc(slices.Clone(f.calls), func(route byte) bool { return route == 11 })
++			require.Equal(t, []byte{10, 10, 9, 9}, mutations, "vacate before claim, even after an ambiguous removal")
++			f.mu.Unlock()
++		})
++	}
++}
++
++func TestOmnetFollowupReturnsAuthenticationFailure(t *testing.T) {
++	h, n, _ := omnetApp(t)
++	id := types.MustAuthID()
++	request := types.NewRegisterAuthRequest(&types.RegistrationData{MachineKey: n.MachineKey, NodeKey: n.NodeKey})
++	h.state.SetAuthCacheEntry(id, request)
++	rejection := fmt.Errorf("omnet rejected node key signature")
++	request.FinishAuth(types.AuthVerdict{Err: rejection})
++	resp, err := h.waitForFollowup(context.Background(), tailcfg.RegisterRequest{
++		NodeKey: n.NodeKey, Followup: "http://localhost/register/" + id.String(),
++	}, n.MachineKey)
++	require.ErrorIs(t, err, rejection)
++	require.Nil(t, resp, "rejection must not become a fresh login or authorized response")
++}
++
++func TestOmnetRPCWritesOutsidePublicationBarrier(t *testing.T) {
++	for _, authorized := range []bool{false, true} {
++		t.Run(fmt.Sprintf("authorized=%t", authorized), func(t *testing.T) {
++			h, n, _ := omnetApp(t)
++			machine := n.MachineKey
++			if !authorized {
++				machine = key.NewMachine().Public()
++			}
++			ns := &noiseServer{headscale: h, machineKey: machine}
++			w := &omnetBlockedWriter{ResponseRecorder: httptest.NewRecorder(), started: make(chan struct{}), release: make(chan struct{})}
++			body := []byte(fmt.Sprintf("{\"NodeKey\":%q}", n.NodeKey.String()))
++			done := make(chan struct{})
++			go func() {
++				ns.tkaRPC(w, httptest.NewRequest(http.MethodGet, "/", bytes.NewReader(body)), 1)
++				close(done)
++			}()
++			<-w.started
++			locked := h.state.TKAMu.TryLock()
++			if locked {
++				h.state.TKAMu.Unlock()
++			}
++			close(w.release)
++			<-done
++			require.True(t, locked, "both success and error writes must release the barrier")
++			want := http.StatusUnauthorized
++			if authorized {
++				want = http.StatusOK
++			}
++			require.Equal(t, want, w.Code)
++		})
++	}
++}
+diff --git a/hscontrol/types/node.go b/hscontrol/types/node.go
+index 4d65e4b..22ab2eb 100644
+--- a/hscontrol/types/node.go
++++ b/hscontrol/types/node.go
+@@ -121,6 +121,11 @@ type Node struct {
+ 	NodeKey    key.NodePublic    `gorm:"serializer:text"`
+ 	DiscoKey   key.DiscoPublic   `gorm:"serializer:text"`
+ 
++	// TKAKey is authenticated registration metadata, not a trusted authority key.
++	// TKASignature is a durable forwarding outbox, never a map-ready signature.
++	TKAKey       key.NLPublic `gorm:"serializer:text"`
++	TKASignature []byte
++
+ 	Endpoints AddrPorts `gorm:"serializer:json"`
+ 
+ 	Hostinfo *tailcfg.Hostinfo `gorm:"column:host_info;serializer:json"`
+diff --git a/hscontrol/types/registration.go b/hscontrol/types/registration.go
+index 669114d..839620f 100644
+--- a/hscontrol/types/registration.go
++++ b/hscontrol/types/registration.go
+@@ -25,7 +25,9 @@ type RegistrationData struct {
+ 
+ 	// NodeKey is the cryptographic identity of the node session.
+ 	// Required.
+-	NodeKey key.NodePublic
++	NodeKey      key.NodePublic
++	TKAKey       key.NLPublic
++	TKASignature []byte
+ 
+ 	// DiscoKey is the disco public key for peer-to-peer connections.
+ 	DiscoKey key.DiscoPublic
+diff --git a/hscontrol/types/tka.go b/hscontrol/types/tka.go
+new file mode 100644
+index 0000000..5eda25e
+--- /dev/null
++++ b/hscontrol/types/tka.go
+@@ -0,0 +1,9 @@
++package types
++
++// OmnetCheckpoint prevents a restarted adapter from silently accepting an older
++// or empty daemon snapshot. Headscale and tkad must be backed up as one pair.
++// This is an observed transport revision, not replicated authority state.
++type OmnetCheckpoint struct {
++	ID       uint `gorm:"primary_key"`
++	Revision uint64
++}
+diff --git a/hscontrol/types/types_clone.go b/hscontrol/types/types_clone.go
+index 315cabf..6696770 100644
+--- a/hscontrol/types/types_clone.go
++++ b/hscontrol/types/types_clone.go
+@@ -45,6 +45,7 @@ func (src *Node) Clone() *Node {
+ 	}
+ 	dst := new(Node)
+ 	*dst = *src
++	dst.TKASignature = append(src.TKASignature[:0:0], src.TKASignature...)
+ 	dst.Endpoints = append(src.Endpoints[:0:0], src.Endpoints...)
+ 	dst.Hostinfo = src.Hostinfo.Clone()
+ 	if dst.IPv4 != nil {
+@@ -86,6 +87,8 @@ var _NodeCloneNeedsRegeneration = Node(struct {
+ 	MachineKey     key.MachinePublic
+ 	NodeKey        key.NodePublic
+ 	DiscoKey       key.DiscoPublic
++	TKAKey         key.NLPublic
++	TKASignature   []byte
+ 	Endpoints      AddrPorts
+ 	Hostinfo       *tailcfg.Hostinfo
+ 	IPv4           *netip.Addr
+diff --git a/hscontrol/types/types_view.go b/hscontrol/types/types_view.go
+index 35fffee..9e8c6a4 100644
+--- a/hscontrol/types/types_view.go
++++ b/hscontrol/types/types_view.go
+@@ -193,10 +193,15 @@ func (v *NodeView) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+ 	return nil
+ }
+ 
+-func (v NodeView) ID() NodeID                             { return v.ж.ID }
+-func (v NodeView) MachineKey() key.MachinePublic          { return v.ж.MachineKey }
+-func (v NodeView) NodeKey() key.NodePublic                { return v.ж.NodeKey }
+-func (v NodeView) DiscoKey() key.DiscoPublic              { return v.ж.DiscoKey }
++func (v NodeView) ID() NodeID                    { return v.ж.ID }
++func (v NodeView) MachineKey() key.MachinePublic { return v.ж.MachineKey }
++func (v NodeView) NodeKey() key.NodePublic       { return v.ж.NodeKey }
++func (v NodeView) DiscoKey() key.DiscoPublic     { return v.ж.DiscoKey }
++
++// TKAKey is authenticated registration metadata, not a trusted authority key.
++// TKASignature is a durable forwarding outbox, never a map-ready signature.
++func (v NodeView) TKAKey() key.NLPublic                   { return v.ж.TKAKey }
++func (v NodeView) TKASignature() views.ByteSlice[[]byte]  { return views.ByteSliceOf(v.ж.TKASignature) }
+ func (v NodeView) Endpoints() views.Slice[netip.AddrPort] { return views.SliceOf(v.ж.Endpoints) }
+ func (v NodeView) Hostinfo() tailcfg.HostinfoView         { return v.ж.Hostinfo.View() }
+ func (v NodeView) IPv4() views.ValuePointer[netip.Addr]   { return views.ValuePointerOf(v.ж.IPv4) }
+@@ -287,6 +292,8 @@ var _NodeViewNeedsRegeneration = Node(struct {
+ 	MachineKey     key.MachinePublic
+ 	NodeKey        key.NodePublic
+ 	DiscoKey       key.DiscoPublic
++	TKAKey         key.NLPublic
++	TKASignature   []byte
+ 	Endpoints      AddrPorts
+ 	Hostinfo       *tailcfg.Hostinfo
+ 	IPv4           *netip.Addr

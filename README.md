@@ -64,6 +64,8 @@ denial-of-service bug.
 | `om/<unit>/test/` | Program-mode test driver, vectors, `run.sh` |
 | `cmd/tkad/` | Native Omega local daemon, RPC handlers, recovery and real-socket tests |
 | `tools/build-tkad.sh` | Builds the daemon with the pinned compiler |
+| `integration/headscale/` | Pinned Headscale v0.29.6 adapter patch, build script and trust contract |
+| `integration/e2e/` | Unmodified Tailscale v1.102.0 client builds and isolated lifecycle harness |
 | `docs/design/` | Design documents |
 | `tools/omc.sh` | Builds the pinned seed-born Omega compiler and verifies its digest |
 | `tools/test.sh` | Runs library and daemon suites |
@@ -71,7 +73,8 @@ denial-of-service bug.
 ## Build and test
 
 Requirements: Linux on ARM64 (the Omega compiler emits AArch64 Linux programs), `git`, POSIX `sh`,
-Python 3, and Go >=1.26.5 for the TKA differential oracle. Go is test-only; shipped logic is Omega.
+Python 3, and Go >=1.26.5 for the TKA differential oracle. Omega holds all TKA logic;
+the optional Headscale adapter is Go glue and uses Go1.27.3.
 
 ```sh
 tools/test.sh      # builds the pinned compiler on first use, then runs every unit's tests
@@ -84,9 +87,12 @@ snapshots, and validated restart recovery over a private Unix socket. Its local 
 and must run as the same UID; the daemon does not authenticate remote Tailscale clients.
 
 The current profile supports one tailnet, 64 nodes, 128 authority updates and 64-KiB JSON messages.
-Headscale integration and stock-client end-to-end qualification remain pending. This is not yet
-deployed tailnet protection. Build with `tools/build-tkad.sh`; see
-[`cmd/tkad/README.md`](cmd/tkad/README.md) before running it.
+The Headscale adapter and stock-client control-plane lifecycle have passed isolated
+end-to-end verification, including unsigned-peer filtering, authenticated rotation,
+authority-key removal, persistence, owner authorization, outage rejection and disablement.
+This is not deployed tailnet protection, data-plane qualification or a production security audit.
+Build with `tools/build-tkad.sh`; see [`cmd/tkad/README.md`](cmd/tkad/README.md) and
+[`integration/headscale/README.md`](integration/headscale/README.md) before running.
 
 See [`docs/design/tailnet-lock.md`](docs/design/tailnet-lock.md) for the implementation limits,
 verification plan, and remaining stages.
