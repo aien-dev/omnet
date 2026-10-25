@@ -40,7 +40,12 @@ def execute(binary, data, expected):
 
 
 go = os.environ.get("GO", "go")
-subprocess.run([go, "build", "-mod=mod", "-o", str(OUT / "oracle"), "."], cwd=HERE / "oracle", check=True)
+# Output is compared byte for byte, and Go 1.27 changed encoding/json escaping
+# of invalid UTF-8. Pin the release the committed corpus was generated with;
+# an explicit GOTOOLCHAIN still wins.
+oracle_env = dict(os.environ)
+oracle_env.setdefault("GOTOOLCHAIN", "go1.26.8")
+subprocess.run([go, "build", "-mod=mod", "-o", str(OUT / "oracle"), "."], cwd=HERE / "oracle", env=oracle_env, check=True)
 result = subprocess.run([str(OUT / "oracle")], stdout=subprocess.PIPE, check=True)
 (OUT / "oracle.jsonl").write_bytes(result.stdout)
 rows = [json.loads(line) for line in result.stdout.splitlines()]

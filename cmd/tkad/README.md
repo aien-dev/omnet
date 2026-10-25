@@ -108,8 +108,12 @@ for bootstrap's disablement secret and cannot be reinitialized in this profile.
 
 Each mutating request operates on an inactive candidate slot, including registry,
 signatures, pending state, support/disablement secrets and authority. The complete
-response is encoded and checked against capacity **before** persistence. Only
-then is a complete snapshot streamed to storage, synced, atomically renamed and
+response is encoded and checked against capacity **before** persistence. A
+candidate whose registry snapshot would not fit the map response is rejected with
+413 and never committed, so a successful mutation cannot make the registry
+unreadable. Submitted node-key signatures are stored in canonical typed form:
+ignored CBOR fields are dropped before storage, so they cannot pad the snapshot.
+Only then is a complete snapshot streamed to storage, synced, atomically renamed and
 the directory synced. A successful commit is followed by an infallible live-slot
 switch. Pre-rename errors discard the candidate and return503. Post-rename fsync
 uncertainty exits74 immediately, without rollback or further serving. Exit74 also

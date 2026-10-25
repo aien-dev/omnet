@@ -259,8 +259,58 @@ still shares the daemon UID. Its durable revision floor is not authenticated rol
 These checks prove control-plane behavior, not packet delivery, power-loss durability,
 constant-time cryptography, or production security.
 
-## Plan and status
+### Stage-six readiness review
 
+Two independent read-only source reviews covered recovery/deployment hazards and the admission
+boundary. Both found defects rather than only limitations, and each was fixed and regression
+tested:
+
+- **Registry readability.** A verified node-key signature was stored as submitted, and typed
+  decoding ignores unknown CBOR fields, so an ordinary registered client could keep padding
+  accepted signatures until the registry no longer fit the 64-KiB map response. Reconciliation
+  then failed for every request and the daemon could not be repaired through normal RPCs.
+  Accepted signatures are now stored in canonical typed form, and any candidate whose registry
+  snapshot would not fit the map response is rejected with 413 before it is persisted. The new
+  suite covers a 30,000-byte padded signature being accepted and stored canonically, surviving
+  restart, and a test-only raw-storage variant proving that an over-limit second signature is
+  refused while the registry stays readable.
+- **Unauthenticated admission.** TKA RPCs and map polls took the global publication mutex and
+  performed SQL plus daemon reconciliation before the caller's identity was checked, so an
+  arbitrary Noise client could queue on the barrier. A TKA RPC now resolves the caller against
+  committed SQL first and returns 401 without touching the daemon, and registration and map
+  admission take a bounded slot and answer 503 instead of queueing.
+- **Silent downgrade.** Unsetting both adapter variables after activation used to start stock
+  behaviour and publish maps with nil `TKAInfo`. Startup now refuses when the database already
+  records adapter state.
+
+The remaining findings were deployment limitations, not defects: one committed node without an
+NLKey blocks publication for the whole tailnet, SQLite cannot be downgraded in place, the
+revision floor is not authenticated rollback protection, and disablement is permanent for that
+database. They are recorded as gates in
+[`integration/headscale/README.md`](../../integration/headscale/README.md).
+
+Re-verification after these changes, on the pinned compiler
+`734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61`:
+
+- All twelve Omega suites passed (`tools/test.sh`, exit 0). The daemon suite reported 310
+  socket assertions and the new failure/recovery checks, including the registry capacity guard,
+  and the JSON differential remained 7,706/7,706. That differential now pins its oracle
+  toolchain in `om/json/test/run.py`: Go 1.27 changes `encoding/json` UTF-8 escaping, so an
+  unpinned oracle fails on byte comparison.
+- Focused adapter regressions, the complete control/state/mapper/types suites and SQLite
+  migration tests passed, including three new tests: unregistered identity refuses before
+  authority work, saturated admission fails fast, and adapter state without settings refuses
+  startup. The deleted-identity test now drives orphan removal through the watcher instead of
+  relying on an unauthorized request.
+- The isolated stock-client lifecycle passed all 13 records again with the rebuilt binaries.
+- The committed patch applied to a fresh clone of the pinned tag and rebuilt to a byte-identical
+  controller: SHA-256 `71ffcb5e6aed6bd6b2ec441b718220e2ad1d70d3fa767c728d104447f8668807`
+  (supersedes the stage-five hash, which predates these fixes).
+
+These are host and isolated-namespace results. They do not establish packet delivery, power-loss
+durability, constant-time cryptography, or production security, and no deployment is approved.
+
+## Plan and status
 1. Crypto primitives: BLAKE2s, SHA-512, Ed25519. **Done.**
 2. BLAKE2b, Argon2i, codecs, CBOR. **Done.**
 3. TKA model and bounded in-memory chain logic, differential against `tka`. **Implemented.**
@@ -269,5 +319,8 @@ constant-time cryptography, or production security.
    See [`cmd/tkad/README.md`](../../cmd/tkad/README.md) for invocation, framing, limits and tests.
 5. Headscale glue and end-to-end tests with stock clients. **Implemented and verified in isolation.**
    See [`integration/headscale/README.md`](../../integration/headscale/README.md) for reproduction.
-6. Independent production-readiness review and deployment planning remain. Source reviews found
-   and drove fixes during stage five, but are not a production audit. No live deployment is implied.
+6. Independent readiness review and deployment planning. **Done for source review and
+   rehearsal planning.** Two reviews found three defects, fixed and regression tested in
+   [Stage six](#stage-six-readiness-review). Deployment gates and the paired-restore
+   procedure are in [`integration/headscale/README.md`](../../integration/headscale/README.md).
+   This is not a production audit, and no live deployment is approved.

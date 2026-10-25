@@ -44,7 +44,10 @@ is created; the isolated E2E harness creates the user and checks the returned ID
 Only currently unexpired, untagged nodes owned by that user receive the admin
 assertion. Noise machine identity and the current unique node key must both match. A body
 cannot assert a user, NodeID or administrator status. Setting only one variable
-is an error. Setting neither leaves ordinary upstream Headscale behavior.
+is an error. Setting neither leaves ordinary upstream Headscale behavior **only on
+a database that has never used this adapter**; once adapter state exists (a
+checkpoint row or any node with a tailnet-lock key), the server refuses to start
+instead of publishing maps without TKA state.
 
 Headscale still needs a nonempty DERP map, even in isolation. The E2E harness
 supplies a private region and private client sockets; it never uses the live
@@ -104,7 +107,13 @@ and root are trusted and can alter either store. Outages do not revoke already
 installed peer connectivity. This is not a separate-UID deployment profile or a
 production security audit.
 
-Limits remain one tailnet, 64 nodes, 128 AUMs and 64-KiB IPC JSON messages. IPC and
+Limits remain one tailnet, 64 nodes, 128 AUMs and 64-KiB IPC JSON messages. Every
+committed mutation must still be servable through the 64-KiB registry response:
+an accepted node signature is stored in canonical form, so ignored CBOR fields
+cannot pad it, and a candidate that would exceed the response limit is rejected
+with 413 before it is persisted. A saturated registration or map admission
+answers 503 instead of queueing on the publication barrier, and a TKA RPC from
+an unregistered Noise identity is refused before any daemon work. IPC and
 raw RPC read/write phases have absolute deadlines; a bounded serial daemon and
 publication barrier trade throughput for simple ordering. New registrations beyond
 64, zero node keys, duplicate keys even across users on one machine, and signatures
@@ -155,6 +164,136 @@ the real Omega suite or stock-client E2E. The parent integration run supplies th
 receipts. For broader upstream regression coverage run the normal Headscale unit
 suites separately; Docker-based Headscale integration tests are not required by
 this adapter's isolated stock-client harness.
+
+## Deployment gate and recovery plan
+
+The [Tailworm disclosure](https://tailworm.com/) also describes SSH forwarding,
+app connectors, unauthenticated control-server exhaustion, hostile DERP responses
+and Serve exposure. This adapter does not patch those components. Signature-based
+node admission does not stop an already authorized compromised device from using
+its existing permissions, or protect signing keys on a compromised endpoint.
+Qualify upstream fixes and feature-specific hardening separately; passing this
+suite must never be reported as “Tailworm fixed” or “the network is secure.”
+
+**Not approved for live deployment.** The isolated lifecycle is a control-plane
+receipt, not a production security audit or proof of packet delivery. Keep this
+adapter off the live controller until the following gates have evidence:
+
+- **Every committed node must carry an NLKey before activation, and the roster
+  must fit the profile (at most 64 nodes, unique node keys, no ambiguous
+  identity).** Reconciliation fails as a whole while any node lacks one, which
+  closes map streams and answers new map polls 503 for the entire tailnet until
+  that node re-registers or is deleted. Nodes created before this migration have
+  a null NLKey, so activating in place over an existing database blackouts
+  control until every node, including offline ones, re-registers. A running
+  client may not re-register on its own. Verify with `SELECT` on `nodes` that no
+  row has a null `tka_key` and that the count is within 64, immediately before
+  the change window.
+- Inventory the actual clients, registered nodes (including offline nodes), NLKeys,
+  authority history and expected message sizes against this bounded profile.
+  The tested client is v1.102.0; other versions need their own qualification.
+  Every accepted node signature occupies part of one 64-KiB registry response.
+  A mutation that would not fit is now rejected with 413 instead of being
+  committed unreadable, so qualification must show the real roster plus signature
+  history stays below that response limit for the operational horizon. The 128-AUM
+  authority limit has no compaction path; plan for it before exhaustion.
+- Establish and test an administration path independent of this tailnet, including
+  console or direct SSH access. An existing tailnet SSH session is not a recovery
+  path: controller loss, key rotation or signature rejection can prevent reconnect.
+- Select the owner user by numeric ID and enumerate every unexpired, untagged
+  device that will receive administrator privileges. Ownership is user-wide, not
+  restricted to one operator device; a newly enrolled unsigned owner device also
+  qualifies, so its enrollment credentials are part of the administration boundary.
+- Keep at least two separately held signing keys and protect the disablement
+  secret offline. Do not store signing private keys or recovery secrets on the
+  controller. Test operator recovery using disposable keys first. A nonempty
+  `SupportDisablement` value submitted at `init/finish` is stored in the tkad
+  snapshot, so a same-UID controller compromise can read and use it: either
+  accept that, or never submit it and keep the secret off the controller
+  entirely (the client then needs its own copy for `tailscale lock disable`).
+- Rehearse the database migration, paired backup/restore, client reconnect and
+  packet-level signed/unsigned-peer behavior in a separate representative network.
+  Include the phone and the actual SSH path before scheduling a live change.
+- Review the same-UID trust boundary and untrusted-client availability limits.
+  Controller compromise grants access to tkad state; Omega is not a sandbox for
+  the controller. Source review does not establish constant-time behavior.
+  Registration and map admission are bounded (a saturated adapter answers 503
+  "busy" instead of queueing), and a TKA RPC from an unregistered Noise identity
+  is refused before any shared persistence work. That bounds amplification; it
+  does not make the control plane immune to load.
+- On SQLite, a stock v0.29.6 binary refuses a migrated database at its schema
+  check, and the migration has no rollback. Treat the adapter as a one-way
+  migration for that database: keep the original binary and pre-migration
+  database together, and rebase and re-qualify the patch for every Headscale
+  upgrade. PostgreSQL is unqualified and does not perform that schema check, so
+  it would start stock and silently drop Tailnet Lock state.
+- Run tkad and Headscale as separate units under the same UID, in the same
+  network namespace, with tkad started first. Never put `--init` in a unit file.
+  Handle the daemon's exit codes distinctly: 73 is a refused start (do not
+  restart in a loop), 74 is a deliberate storage fail-stop, 76 is a failed
+  rollover or exec. Restored state directories must be 0700/0600, owned by the
+  service UID, without hard links or a symlinked final component, and no tkad
+  process may be running while the directory is copied.
+
+### Quiescent backup and restore
+
+This is the required ordering for a rehearsal, not a claim that a live restore
+has been tested:
+
+1. Stop Headscale and prevent its automatic restart so no registry or TKA request
+   can be submitted. Stop tkad and prevent its automatic restart.
+2. Capture a consistent Headscale database using the database's supported backup
+   mechanism, plus the tkad state directory, controller configuration, policy,
+   artifact hashes and both adapter settings. Keep SQLite WAL/journal consistency;
+   copying a live main database file alone is not a backup.
+3. Keep the pair together, access-restricted and labelled with one capture ID.
+   The snapshot includes secrets. Do not put it in this public repository.
+4. Restore both stores into an isolated environment under trusted ancestors and
+   the intended UID/modes. Never restore one store alone, decrement the observed
+   revision floor, or use `--init` to bypass missing/corrupt state.
+5. Start tkad without `--init`, then Headscale with both adapter settings. Check
+   the authority head, roster and accepted signatures, then reconnect clients.
+   A checksum-valid backup is not proof that clients accept its authority history.
+
+The revision floor detects some stale restores; it is not authentication of the
+backup. Rolling both stores back can evade that floor and conflict with client
+state. If a rehearsal cannot reconcile the saved authority with current clients,
+keep publication stopped and recover the correct stores rather than resetting
+the authority.
+
+### Change window and interruption
+
+Before enabling Tailnet Lock, preserve the pre-migration database and original
+controller binary/configuration. A pre-activation rollback restores that original
+set, not an older binary against the migrated database.
+
+After activation, there is **no transparent downgrade** to ordinary Headscale:
+removing the adapter variables does not safely undo the authority already stored
+by clients. On SQLite a stock binary refuses the migrated database outright; on
+PostgreSQL it would start and silently drop Tailnet Lock state. To make that
+failure explicit, the adapter now refuses to start when both settings are absent
+and the database already records adapter state (a checkpoint row or any node with
+a tailnet-lock key). Prefer repair/roll-forward using the paired stores.
+Disabling Tailnet Lock is an explicit security downgrade requiring the owner's
+approval, a valid recovery secret and verified client convergence. Disablement is
+permanent for that database: a disabled authority cannot be reinitialized, and a
+fresh `--init` directory starts at revision 0, which the durable floor rejects.
+Re-enabling Tailnet Lock therefore needs a new Headscale database. Run `disable`
+only while the adapter is active, so clients can fetch the stored disablement
+secret; a client that misses it needs `tailscale lock local-disable` locally.
+Do not present disablement as a reversible toggle.
+
+The revision floor catches a lower daemon revision, not an arbitrary different
+authority at an equal or higher revision, and it advances before reconciliation.
+Restoring an older database beside a newer tkad therefore removes the nodes and
+signatures the older database lacks. That is why the stores must always be
+restored together from one capture.
+
+A controller restart interrupts control-plane requests and map streams. Existing
+peer paths may continue, but new connections, relay-dependent paths, registration,
+rotation and SSH reconnect are not guaranteed. A tkad outage blocks publication;
+it does not revoke existing data-plane connectivity. No live-service interruption
+is part of the isolated build/review workflow.
 
 ## Third-party notices
 

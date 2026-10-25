@@ -92,6 +92,15 @@ def refused_start(directory, *args):
     check(p.returncode != 0 and not 100 <= p.returncode <= 114, f"startup must refuse normally, rc={p.returncode}")
 
 
+def padded(signature, size):
+    """Re-encode a valid NKS map with one ignored field, without touching its hash."""
+    raw = base64.b64decode(signature)
+    check(0xa0 <= raw[0] <= 0xb7, "fixture NKS is a small CBOR map")
+    pad = b"\x18\x63"  # unknown unsigned key 99
+    value = b"\x5a" + struct.pack(">I", size - len(raw) - len(pad) - 1 - 5)
+    return base64.b64encode(bytes([raw[0] + 1]) + raw[1:] + pad + value + b"\x00" * struct.unpack(">I", value[1:])[0]).decode()
+
+
 def enable(d):
     d.register(0)
     d.register(1)
@@ -235,4 +244,22 @@ with tempfile.TemporaryDirectory(prefix="omnet-tkad-") as top:
     refused_start(missing)
     insecure = root / "insecure"; insecure.mkdir(mode=0o755)
     refused_start(insecure, "--init")
+    # Ignored CBOR fields cannot pad the durable registry past the map limit.
+    bounded = root / "registry-bounds"
+    bounded.mkdir(mode=0o700)
+    d = Daemon(bounded, True)
+    try:
+        d.register(0)
+        d.register(1)
+        d.rpc(1, d.req(GenesisAUM=FIX["genesis"]), admin=True)
+        d.rpc(2, d.req(Signatures={"1":FIX["signatures"][0],"2":FIX["signatures"][1]}), admin=True)
+        d.register(2)
+        d.rpc(7, d.req(Signature=padded(FIX["signatures"][2], 30000)))
+        stored = d.map()
+        check(stored["Nodes"][2]["KeySignature"] == FIX["signatures"][2], "ignored CBOR fields are stripped before storage")
+        check(d.rpc(8, d.req(KeyID=FIX["keyID"]))["Signatures"][2] == FIX["signatures"][2], "affected-sigs serves the canonical signature")
+        d.stop(); d = Daemon(bounded)
+        check(d.map() == stored, "canonical storage survives restart")
+    finally:
+        d.stop()
     print(f"PASS tkad real socket {checks} assertions: 8 RPCs, registry/map, security, restart, disk failure, malformed framing")

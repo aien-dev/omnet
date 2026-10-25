@@ -17,6 +17,29 @@ put b j get ds_rot add mul dsrow i 32 j
 end
 ret dsput64 out p b 32
 end
+note Ignored CBOR fields are dropped, so a stored signature cannot be padded.
+fn dscanon sig view uchar 65536 n ulong out edit uchar 65536 to ulong
+t = new ulong 131074 0
+m = new ulong 132 0
+if ne nksdec sig n t m 0
+ret 65537
+end
+ret nksser sig t m out 0 0
+end
+note Store the canonical form; an empty signature still clears the node.
+fn dssetcanon i ulong src view uchar 65536 n ulong auth ulong to ulong
+if eq n 0
+dssetsig i src 0 auth
+ret 0
+end
+c = new uchar 65536 0
+z = dscanon src n c
+if gt z 65536
+ret 1
+end
+dssetsig i c z auth
+ret 0
+end
 fn dsbegin t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
 if eq get ds_ctl 3 0
 ret 403
@@ -411,7 +434,9 @@ end
 if eq dsauthsig b n i tkacget 1 0
 ret 403
 end
-dssetsig i b n tkacget 1
+if ne dssetcanon i b n tkacget 1 0
+ret 400
+end
 put ds_ctl 6 dslit out 0 0
 put ds_ctl 5 1
 ret 200
