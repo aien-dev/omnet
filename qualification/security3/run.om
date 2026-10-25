@@ -19,13 +19,24 @@ text r_space "global q_fault ulong 1\nfn stwr fd int b view uchar 65536 off ulon
 text r_uncert "global q_fault ulong 1\nfn stsync fd int to long\nput q_fault 0 add get q_fault 0 1\nif eq get q_fault 0 4\nret -5\nend\nret fsync fd\nend"
 text r_build "/bin/sh|tools/build-tkad.sh|build/tkad|"
 text r_fail "FAIL runner\n"
-text r_ok "PASS security3 runner: native baseline, short-write, ENOSPC, uncertain, count-control\n"
+text r_ok "PASS security3 runner: pinned native baseline, short-write, ENOSPC, uncertain, count-control, omission-control\n"
 text r_vpre "build/security3/variant"
 text r_lpre "build/security3/run"
 text r_state "/build/security3/state"
 text r_dotom ".om"
 text r_dotlog ".log"
 text r_ctrl "FAIL assertion 202\n"
+text r_omit "FAIL assertion 243\n"
+text r_opass "CONTROL checksum-valid support-secret omission; semantic observer follows\n"
+text r_fmode "--candidate-faults"
+text r_fok "PASS security3 candidate-faults: pinned candidate only, short-write, ENOSPC, uncertain, omission-control\n"
+text r_spine "5a85c0e62e752b1f8631e234930af1faffdcefcad9fb8cd0da48d59a4a2c1429"
+text r_bpine "c0869a7fa7fd9760feadfb30aa735a572f0baa1d71a942c4b2021e0c044cdd01"
+text r_sha "/usr/bin/sha256sum"
+text r_hlog "build/security3/hash.out"
+text r_sbail "FAIL baseline source identity\n"
+text r_bbail "FAIL baseline binary identity\n"
+text r_cbail "FAIL candidate explicit identity\n"
 fn rcheck ok bool to void
 if not ok
 z = write 2 r_fail 0 len r_fail
@@ -321,7 +332,7 @@ exit 61
 end
 z = fclose int fd
 expect = ulong 0
-if eq mode 4
+if or eq mode 4 eq mode 6
 expect = ulong 41
 end
 rwait pid expect
@@ -333,17 +344,23 @@ fn rshow fd int mode ulong to void
 a = new uchar 65536 0
 n = rread int fd a
 if eq mode 4
-found = ulong 0
-for j ulong add sub ulong n len r_ctrl 1
-same = ulong 1
-for k ulong len r_ctrl
-if ne get a add j k get r_ctrl k
-same = ulong 0
+for j ulong len r_ctrl
+put r_src j get r_ctrl j
 end
+put r_len 0 len r_ctrl
+rcheck rmarked a n
 end
-found = or found same
+if eq mode 6
+for j ulong len r_omit
+put r_src j get r_omit j
 end
-rcheck ne found 0
+put r_len 0 len r_omit
+rcheck rmarked a n
+for j ulong len r_opass
+put r_src j get r_opass j
+end
+put r_len 0 len r_opass
+rcheck rmarked a n
 end
 rwriteall 1 a ulong n
 z = fclose int fd
@@ -378,7 +395,7 @@ put r_clen 0 ulong n
 for j ulong ulong n
 put r_cmp j get b j
 end
-if eq argcnt 3
+if or eq argcnt 3 eq argcnt 5
 n = argread 2 b 0 4096
 rcheck gt n 0
 put r_canlen 0 ulong n
@@ -392,7 +409,16 @@ if urequested
 runits
 ret 0
 end
+if rfrequested
+rcheck eq argcnt 5
+rfaults
+ret 0
+end
+rcheck or eq argcnt 2 eq argcnt 3
 rbuilder
+note Fail closed before compiling a client, generating fault variants or starting any daemon.
+ridentity 0 0
+ridentity 1 0
 rclientbuild
 rload
 for j ulong 3
@@ -401,11 +427,125 @@ end
 for j ulong 5
 rruncase j
 end
+rruncase 6
 if ne get r_canlen 0 0
 rruncase 5
 end
 z = write 1 r_ok 0 len r_ok
 ret 0
+end
+fn rmarked b view uchar 65536 n ulong to bool
+size = get r_len 0
+if lt n size
+ret false
+end
+for j ulong add sub n size 1
+same = ulong 1
+for k ulong size
+if ne get b add j k get r_src k
+same = ulong 0
+end
+end
+if ne same 0
+ret true
+end
+end
+ret false
+end
+fn rfrequested to bool
+if ne get r_canlen 0 len r_fmode
+ret false
+end
+for j ulong len r_fmode
+if ne get r_cand j get r_fmode j
+ret false
+end
+end
+ret true
+end
+fn rfaults to void
+rbuilder
+ridentity 0 3
+ridentity 1 4
+rclientbuild
+rload
+for j ulong 3
+rvariant add j 1
+end
+for j ulong 3
+rruncase add j 1
+end
+rruncase 6
+z = write 1 r_fok 0 len r_fok
+end
+fn rhash path view uchar 65536 n ulong out edit uchar 65536 to void
+b = new uchar 65536 0
+put b 0 2
+rput b 2 2 len r_sha
+for j ulong len r_sha
+put b add j 4 get r_sha j
+end
+size = rpack b add len r_sha 4 path n
+fd = fopen r_hlog 0 len r_hlog 524866 384
+rcheck ge fd 0
+pid = fork
+rcheck ge pid 0
+if eq pid 0
+z = dupfd int fd 1 0
+rcheck eq z 1
+z = execprog b 0 size
+exit 61
+end
+rwait pid 0
+rcheck eq fseek int fd 0 0 0
+size = rread int fd out
+rcheck ge size 66
+rcheck and eq get out 64 32 eq get out 65 32
+rwriteall 1 out size
+z = fclose int fd
+end
+fn ridentity which ulong arg ulong to void
+b = new uchar 65536 0
+expected = new uchar 65536 0
+actual = new uchar 65536 0
+n = len r_bsrc
+for j ulong n
+put b j get r_bsrc j
+end
+if eq which 1
+n = len r_base
+for j ulong n
+put b j get r_base j
+end
+end
+for j ulong 64
+if eq which 0
+put expected j get r_spine j
+else
+put expected j get r_bpine j
+end
+end
+if ne arg 0
+rcheck eq argread arg expected 0 65 64
+end
+rhash b n actual
+rhashcmp actual expected which arg
+end
+fn rhashcmp actual view uchar 65536 expected view uchar 65536 which ulong arg ulong to void
+for j ulong 64
+if ne get actual j get expected j
+if ne arg 0
+z = write 2 r_cbail 0 len r_cbail
+else
+if eq which 0
+z = write 2 r_sbail 0 len r_sbail
+else
+z = write 2 r_bbail 0 len r_bbail
+end
+end
+exit 62
+end
+end
 end
 
 note Explicit consumer-unit mode. It consumes the existing builder's complete output.

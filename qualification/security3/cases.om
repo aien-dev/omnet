@@ -107,11 +107,15 @@ elapsed = ulong sub monons start
 z = write 1 q_aplat 0 len q_aplat
 qnum elapsed
 z = write 1 q_nl 0 1
+qadvance 2
 before = qsnapshot 2 2
 qbyte int get q_pipes 5 1
 qbyte int get q_pipes 6 0
 qjoin b
 qhead 9
+if eq get q_cfg 7 0
+qadvance 2
+end
 after = qsnapshot 2 2
 z = write 1 q_replay 0 len q_replay
 qnum before
@@ -138,6 +142,8 @@ qbyte int get q_pipes 1 1
 qbyte int get q_pipes 2 0
 qjoin pid
 qclosepipes
+put q_expect 1 1
+qadvance 2
 qhead 9
 n = qsnapshot 2 2
 qrow 330
@@ -146,8 +152,10 @@ fn qchain to void
 b = new uchar 65536 0
 n = qappend b 0 10 11
 qassert eq qrpc b n 5 1 0 0 200 340
+qadvance 3
 n = qappend b 0 12 13
 qassert eq qrpc b n 5 1 0 0 200 341
+qadvance 4
 n = qbase b 0
 n = qlit b n 14
 n = qvalue b n 4
@@ -215,6 +223,9 @@ n = qdisable b 13 0
 qassert eq qrpc b n 6 1 1 0 403 355
 n = qdisable b 13 1
 qassert eq qrpc b n 6 1 1 0 200 356
+qadvance 4
+put q_expect 0 3
+put q_expect 4 32
 qboot
 qbootexact 14
 qassert qcontains 14 357
@@ -235,6 +246,9 @@ qmap
 else
 n = qappend b 0 8 9
 qassert eq qrpc b n 5 1 0 0 200 360
+if eq get q_cfg 7 0
+qadvance 2
+end
 end
 end
 fn qmeasure route ulong to void
@@ -308,6 +322,7 @@ else
 qassert eq qrpc b n 5 1 0 0 200 406
 end
 end
+qadvance 2
 qhead 9
 v = qsnapshot 2 2
 qstop
@@ -321,10 +336,17 @@ qsetup
 qfixture
 qstart 1 0
 qenable
+qinitial
 n = qsnapshot 1 2
 if eq get q_cfg 7 4
 n = qsnapshot 2 2
 qassert false 499
+end
+if eq get q_cfg 7 6
+qstop
+qomission
+n = qsnapshot 1 2
+qassert false 498
 end
 if or eq get q_cfg 7 0 eq get q_cfg 7 5
 qnegative

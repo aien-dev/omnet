@@ -3,6 +3,8 @@ note Independent framing/semantic observer; never calls stload or daemon state h
 global q_seen ulong 16
 global q_chain uchar 32
 global q_sem ulong 8
+note Expected semantic metadata is owned by the request schedule, never read from disk.
+global q_expect ulong 16
 text q_magic "OMNETSNAP0000001"
 text q_disk "SNAPSHOT status revision AUMs frames payloadbytes "
 fn qdigest b view uchar 65536 n ulong h edit uchar 32 to void
@@ -17,6 +19,7 @@ put q_seen 1 qle b 48 8
 put q_seen 2 qle b 56 8
 qassert eq get q_seen 2 count 202
 qassert eq qle b 120 8 1 203
+qmetadata b
 for j ulong 8
 put q_sem j 0
 end
@@ -53,6 +56,7 @@ if eq get q_sem 1 0
 qassert eq n 88 222
 id = qle b 0 8
 qassert and ge id 1 le id 2 223
+qassert eq id add get q_sem 6 1 236
 put q_sem 2 id
 put q_sem 1 qle b 8 8
 qassert eq get q_sem 1 177 224
@@ -62,6 +66,7 @@ else
 qexact b n add get q_sem 2 3
 put q_sem 1 0
 put q_sem 0 sub get q_sem 0 1
+put q_sem 6 add get q_sem 6 1
 end
 ret
 end
@@ -125,7 +130,7 @@ put q_chain j 0
 end
 ret int fd
 end
-fn qframe fd int count ulong to bool
+fn qframe fd int count ulong semantic bool to bool
 b = new uchar 65536 0
 d = new uchar 65536 0
 h = new uchar 32 0
@@ -151,7 +156,9 @@ qdigest b n h
 for j ulong 32
 qassert eq get h j get d add j 32 215
 end
+if semantic
 qpayload b n get q_seen 8 count
+end
 put q_seen 8 add get q_seen 8 1
 put q_seen 9 add get q_seen 9 n
 qput d 64 8 n
@@ -165,7 +172,7 @@ ret true
 end
 fn qsnapshot count ulong state ulong to ulong
 fd = qopen
-while qframe fd count bound 1024
+while qframe fd count true bound 1024
 end
 z = fclose fd
 qassert eq get q_seen 0 state 216
@@ -183,4 +190,131 @@ z = write 1 q_nl 0 1
 qnum get q_seen 9
 z = write 1 q_nl 0 1
 ret get q_seen 1
+end
+fn qinitial to void
+for j ulong 16
+put q_expect j 0
+end
+put q_expect 0 2
+put q_expect 1 2
+put q_expect 3 32
+put q_expect 6 4
+put q_expect 7 1
+put q_expect 15 1
+end
+fn qmetadata b view uchar 65536 to void
+for j ulong 16
+qassert eq qle b mul j 8 8 get q_expect j add 240 j
+end
+end
+fn qadvance count ulong to void
+put q_expect 6 add get q_expect 6 1
+put q_expect 7 count
+end
+text q_omitok "CONTROL checksum-valid support-secret omission; semantic observer follows\n"
+fn qfileout to int
+b = new uchar 65536 0
+p = get q_cfg 6
+for j ulong p
+put b j get q_path j
+end
+for j ulong len q_snap
+put b add p j get q_snap j
+end
+fd = fopen b 0 add p len q_snap 655873 0
+qassert ge fd 0 260
+for j ulong 16
+put b j get q_magic j
+end
+qfilewr int fd b 16
+ret int fd
+end
+fn qfilewr fd int b view uchar 65536 n ulong to void
+p = ulong 0
+while lt p n bound 65536
+z = write fd b p sub n p
+qassert gt z 0 261
+p = add p ulong z
+end
+qassert eq p n 262
+end
+note Test-only resealing of one deliberately malformed fixture, not a store implementation.
+fn qemit fd int b view uchar 65536 n ulong to void
+h = new uchar 32 0
+d = new uchar 65536 0
+qdigest b n h
+qput d 0 8 n
+for j ulong 32
+put d add j 8 get h j
+end
+qfilewr fd d 40
+qfilewr fd b n
+for j ulong 32
+put d j get q_chain j
+put d add j 32 get h j
+end
+put q_seen 8 add get q_seen 8 1
+put q_seen 9 add get q_seen 9 n
+qput d 64 8 n
+qput d 72 8 get q_seen 9
+qput d 80 8 get q_seen 8
+qdigest d 88 h
+for j ulong 32
+put q_chain j get h j
+end
+end
+fn qomitrec fd int src view uchar 65536 n ulong to void
+b = new uchar 65536 0
+p = ulong 0
+idx = ulong 0
+while lt p n bound 16
+qassert le add p 40 n 263
+size = qle src p 8
+if eq size 0
+break
+end
+qassert le size 65536 264
+p = add p 40
+qassert le add p size n 265
+for j ulong size
+put b j get src add p j
+end
+if eq idx 0
+qput b 24 8 0
+end
+if ne idx 5
+qemit fd b size
+end
+p = add p size
+idx = add idx 1
+end
+qassert eq idx 7 266
+end
+fn qomitend fd int to void
+b = new uchar 65536 0
+for j ulong 32
+put b add j 8 get q_chain j
+end
+qput b 40 8 get q_seen 9
+qput b 48 8 get q_seen 8
+qfilewr fd b 56
+qassert eq fsync fd 0 267
+qassert eq fclose fd 0 268
+end
+fn qomission to void
+b = new uchar 65536 0
+fd = qopen
+n = qread fd b 0 65536
+qassert lt n 65536 269
+qassert eq fclose fd 0 270
+fd = qfileout
+qomitrec fd b n
+qomitend fd
+note Same framing observer proves every digest, chain, total, frame count and EOF before refusal.
+fd = qopen
+while qframe fd 1 false bound 1024
+end
+qassert eq get q_seen 8 6 271
+qassert eq fclose fd 0 272
+z = write 1 q_omitok 0 len q_omitok
 end

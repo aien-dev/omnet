@@ -1,0 +1,93 @@
+{
+  "schema": "security3-review-repair-v1",
+  "baseline_commit": "1e075776855d4389b69b23b54b49ed230d488717",
+  "refused_consumer_commit": "f2d702f8a714b3f28ff15bc26be5ecb294f07bdb",
+  "qualification_sources_sha256": {
+    "run.om": "8a881e2f267bc8c22c5542f678bd84a7b76661e6c9cc18da2ad7bb7c3960db76",
+    "io.om": "2c2d56350b89dba3932a6b06587b7468fa78e1637c0b60ae8d6b545d9d2d7a73",
+    "fixture.om": "be6d0e78c6f8698e6677cf19d1390a6275071e428e381c8e6ff353d3d8191c70",
+    "snapshot.om": "3bf2248ee337acc43a49d9e5486fb5d286500c9edfc26f15cfb419f6d2fddb29",
+    "cases.om": "18da9f47df79860f5cc142da1541cbb51b5f6da9b492f84a586d058c6f0f5fc5",
+    "contract.txt": "8349317b34a7dac57d586dac93aec86edcf8bf80695e0d308521c4c9a00ebab3",
+    "README.md": "797780c551e3c32e123db7a792cf9fecb7f6f9137006f1e9ac7919b3841f521f"
+  },
+  "artifacts_sha256": {
+    "runner": "244d696e61368d6a167a77a07134a62db7b4a84f940b561e3ff9eb30916ee91c",
+    "client_source": "d181b8cb174aaab64aada449f2e9ea79f91f236d81f74cf9d3781f6dc61669a9",
+    "client_binary": "572a66dd1eb18097f90157aef1960272bef9bc47da97104fa783f329dbc2aec4",
+    "baseline_source": "5a85c0e62e752b1f8631e234930af1faffdcefcad9fb8cd0da48d59a4a2c1429",
+    "baseline_binary": "c0869a7fa7fd9760feadfb30aa735a572f0baa1d71a942c4b2021e0c044cdd01",
+    "compiler": "734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61",
+    "fault_1_source": "492dfe932fc176244fa20f5e7634a7b192665d4af22860ea6f1cf6048af16380",
+    "fault_1_binary": "15e2e3596a47adbf6987a8b79a65e23677414dbf013aab80ab508c0ae8e6d764",
+    "fault_2_source": "fe9b00de18c3707b37648156b9453614e851a8911ff03c55e2ac51841021eee6",
+    "fault_2_binary": "5c778a346315fb7f7e471335def447133a47a3dcdc2c08a6ce98b27934b528d6",
+    "fault_3_source": "00330d2ce906f85826bbe8cef9dbe510845b4bc5971c84c6e437c59b36b80263",
+    "fault_3_binary": "92b94c0922b6978bf4472078e0a69c854d8ee16ed6e58d77007efe77aa968f58"
+  },
+  "fixture_sha256": "4319f017434e94fa6af99df188e6a05936e73ff93b9468e0dce62fe0fb0f5ace",
+  "external_binding_oracle": {
+    "path": "/usr/bin/sha256sum",
+    "sha256": "a077f232a92c082920430659ec57b49a388b3564c4f4f512698d9cbd6e7512a9",
+    "unavailable": "fail closed"
+  },
+  "commands": [
+    {
+      "command": "sh tools/omc.sh",
+      "exit": 0
+    },
+    {
+      "command": "PINNED_OMC < qualification/security3/run.om > build/security3/run-repaired",
+      "exit": 0
+    },
+    {
+      "command": "build/security3/run-repaired PINNED_OMC",
+      "cwd": "immutable baseline worktree",
+      "exit": 0,
+      "case_order": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6
+      ]
+    },
+    {
+      "command": "BASELINE_RUNNER PINNED_OMC",
+      "cwd": "consumer f2d702f8a714b3f28ff15bc26be5ecb294f07bdb",
+      "exit": 62,
+      "required_marker": "FAIL baseline source identity",
+      "before": "client compilation, variant generation and daemon startup"
+    }
+  ],
+  "raw_logs_sha256": {
+    "review-repair-baseline.log": "8ba2de19d350577f84c907e82c0f10a87a7e4cd1dc299bede507a2aa2df77a8d",
+    "review-repair-baseline-refusal.log": "3e3b6542d1d010ef64afa00e63ec0bac3cc97b70a6b716df90ea60110f42903c"
+  },
+  "control_results": {
+    "wrong_count": {
+      "normal_exit": 41,
+      "assertion": 202
+    },
+    "support_secret_omission": {
+      "checksum_valid_prepass": true,
+      "normal_exit": 41,
+      "assertion": 243,
+      "raw_snapshot_sha256": "45d747536067fb4fe98d4008ceae8c5d2b3e29fb7caa525de127614b4ef5912a"
+    }
+  },
+  "fault_results": {
+    "short_write_7_bytes": "completed and survived restart",
+    "ENOSPC": "503, unchanged expected metadata, next mutation succeeded",
+    "postrename_dirfsync_EIO": "no response; exact exit74; restart retained candidate"
+  },
+  "rejected_consumer_source_sha256": "b65bf2f876941cb29750937cf2cc38eb8448c43404318be6ae8f89f1e53ab4e4",
+  "rejected_consumer_binary_sha256": "e2770128ae9bb14f4be07529f4ec54ce26e4403a361fc10a07131fdc2d144dca",
+  "not_run": [
+    "final-candidate matched service run after repair",
+    "final-candidate fault mode after repair",
+    "consumer-units after repair"
+  ],
+  "limitations": "Bounded fixture qualification only; no remote authentication, durable aggregate quotas, whole-secret or timing proof, hostile sameUID/root, rollback or powerloss qualification. Historical receipts unchanged."
+}
