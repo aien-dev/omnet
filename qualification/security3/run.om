@@ -69,9 +69,9 @@ fn rcompile src view uchar 65536 sn ulong dst view uchar 65536 dn ulong to void
 fd = fopen src 0 sn 524288 0
 out = fopen dst 0 dn 524865 448
 rcheck and ge fd 0 ge out 0
-rcompilefds fd out
+rcompilefds fd out 0
 end
-fn rcompilefds fd long out long to void
+fn rcompilefds fd long out long expect ulong to void
 b = new uchar 65536 0
 a = new uchar 65536 0
 put b 0 1
@@ -91,7 +91,7 @@ exit 61
 end
 z = fclose int fd
 z = fclose int out
-rwait pid 0
+rwait pid expect
 end
 fn rbuilder to void
 b = new uchar 65536 0
@@ -388,6 +388,10 @@ end
 end
 z = makedir r_root 0 len r_root 448
 rcheck or eq z 0 eq z -17
+if urequested
+runits
+ret 0
+end
 rbuilder
 rclientbuild
 rload
@@ -402,4 +406,355 @@ rruncase 5
 end
 z = write 1 r_ok 0 len r_ok
 ret 0
+end
+
+note Explicit consumer-unit mode. It consumes the existing builder's complete output.
+text u_mode "--consumer-units"
+text u_prefix "build/security3/unit"
+text u_inputs "om/quantity/quantity.om|om/quantity/tests.om|om/quantity/mutate.om|om/quantity/fixtures/crypto-wrap.om|om/quantity/fixtures/mixed-scalar.om|om/quantity/fixtures/mixed-quantity.om|om/quantity/fixtures/mixed-object.om|om/quantity/fixtures/mixed-slice.om|cmd/tkad/security3-quantity/mutate.om|cmd/tkad/socket.om|cmd/tkad/rpc.om|cmd/tkad/security3-quantity/tests.om|cmd/tkad/security3-secret/controls.om|cmd/tkad/security3-secret/fixtures.om|cmd/tkad/security3-secret/main.om|cmd/tkad/main.om|om/quantity/oracle-export.om|"
+text u_marks "PASS Q1-Q9 runtime; Q2 widths1..8 pairs87380 operations262140\n|FAIL Q1_ADD_GUARD\n|FAIL Q4_MUL_GUARD\n|PASS SC1_CURSOR SC1_NOOP actual consumer calls\n|FAIL SC1_CURSOR\n|FAIL SC1_NOOP\n|"
+text u_row "UNIT id exit "
+text u_comp "COMPILE id exit "
+text u_ok "PASS security3 consumer-units: library, four type refusals, crypto, actual consumer, secret modes, four completed mutants, exporter\n"
+text u_empty "/dev/null"
+fn urequested to bool
+if ne get r_canlen 0 len u_mode
+ret false
+end
+for j ulong len u_mode
+if ne get r_cand j get u_mode j
+ret false
+end
+end
+ret true
+end
+fn uinput b edit uchar 65536 idx ulong to ulong
+s = ulong 0
+for j ulong idx
+while ne get u_inputs s 124 bound 256
+s = add s 1
+end
+s = add s 1
+end
+n = ulong 0
+while ne get u_inputs s 124 bound 256
+put b n get u_inputs s
+s = add s 1
+n = add n 1
+end
+ret n
+end
+note kind0 source, kind1 executable, kind2 output log; each runner PID owns its artifacts.
+fn upath b edit uchar 65536 id ulong kind ulong to ulong
+for j ulong len u_prefix
+put b j get u_prefix j
+end
+n = rnumber b len u_prefix ulong getpid
+put b n 45
+n = rnumber b add n 1 id
+if eq kind 0
+for j ulong len r_dotom
+put b add n j get r_dotom j
+end
+ret add n len r_dotom
+end
+if eq kind 2
+for j ulong len r_dotlog
+put b add n j get r_dotlog j
+end
+ret add n len r_dotlog
+end
+ret n
+end
+fn uopen id ulong kind ulong writing bool to int
+b = new uchar 65536 0
+n = upath b id kind
+flags = int 524288
+if writing
+flags = 524993
+end
+fd = fopen b 0 n flags 448
+rcheck ge fd 0
+ret int fd
+end
+fn ucopy src int dst int to void
+b = new uchar 65536 0
+while true bound 1024
+n = read src b 0 65536
+rcheck ge n 0
+if eq n 0
+break
+end
+rwriteall dst b ulong n
+end
+end
+fn uappend out int idx ulong to void
+b = new uchar 65536 0
+n = uinput b idx
+fd = fopen b 0 n 524288 0
+rcheck ge fd 0
+ucopy int fd out
+z = fclose int fd
+end
+fn uappendgen out int id ulong to void
+fd = uopen id 0 false
+ucopy fd out
+z = fclose fd
+end
+fn uglobal out int start ulong count ulong to void
+b = new uchar 65536 0
+while ne count 0 bound 1024
+n = count
+if gt n 65536
+n = 65536
+end
+for j ulong n
+put b j get r_src add start j
+end
+rwriteall out b n
+start = add start n
+count = sub count n
+end
+end
+note Verify cmd/tkad/main.om is the exact suffix; no guessed marker or duplicate build list.
+fn uproduction to void
+b = new uchar 65536 0
+n = uinput b 15
+fd = fopen b 0 n 524288 0
+rcheck ge fd 0
+n = rread int fd b
+rcheck eq fseek int fd 0 2 long n
+z = fclose int fd
+rcheck le n get r_len 0
+start = sub get r_len 0 n
+for j ulong n
+rcheck eq get r_src add start j get b j
+end
+put r_len 0 start
+end
+fn ucompile id ulong want ulong to void
+fd = uopen id 0 false
+out = uopen id 1 true
+rcompilefds long fd long out want
+ucompiled id want
+end
+note Every assembly below names an actual owner fixture, not a copied test implementation.
+fn uassemble id ulong to void
+out = uopen id 0 true
+if eq id 0
+uappend out 0
+uappend out 1
+end
+if eq id 1
+uappend out 2
+end
+if eq id 2
+uappend out 3
+end
+if and ge id 3 le id 6
+uappend out 0
+uappend out add id 1
+end
+if eq id 7
+uappend out 8
+end
+if eq id 8
+uglobal out 0 get r_len 0
+uappend out 11
+end
+if eq id 9
+uglobal out 0 get r_len 0
+uappend out 12
+uappend out 13
+uappend out 14
+end
+if and ge id 10 le id 11
+uappendgen out add id 10
+uappend out 1
+end
+if and ge id 12 le id 13
+ureplace out add id 10 sub id 3
+uappend out 11
+end
+if eq id 14
+uappend out 0
+uappend out 16
+end
+z = fclose out
+end
+fn ulaunch b view uchar 65536 n ulong infd int outfd int want ulong to void
+pid = fork
+rcheck ge pid 0
+if eq pid 0
+rcheck eq dupfd infd 0 0 0
+rcheck eq dupfd outfd 1 0 1
+z = execprog b 0 n
+exit 61
+end
+rwait pid want
+end
+fn uargs b edit uchar 65536 id ulong extras ulong letter uchar to ulong
+a = new uchar 65536 0
+n = upath a id 1
+rput b 0 2 add extras 1
+p = rpack b 2 a n
+put a 0 letter
+for j ulong extras
+p = rpack b p a 1
+end
+ret p
+end
+fn umutate binid ulong input ulong outid ulong letter uchar to void
+b = new uchar 65536 0
+a = new uchar 65536 0
+n = uinput a input
+fd = fopen a 0 n 524288 0
+rcheck ge fd 0
+out = uopen outid 0 true
+n = uargs b binid 1 letter
+ulaunch b n int fd out 0
+z = fclose int fd
+z = fclose out
+end
+note Replace the entire owner module, exactly once, in the authoritative production prefix.
+fn umatch b view uchar 65536 n ulong pos ulong to bool
+for j ulong n
+if ne get b j get r_src add pos j
+ret false
+end
+end
+ret true
+end
+fn ureplace out int changed ulong input ulong to void
+b = new uchar 65536 0
+n = uinput b input
+fd = fopen b 0 n 524288 0
+rcheck ge fd 0
+n = rread int fd b
+rcheck eq fseek int fd 0 2 long n
+z = fclose int fd
+found = ufind b n
+uglobal out 0 found
+uappendgen out changed
+found = add found n
+uglobal out found sub get r_len 0 found
+end
+fn ufind b view uchar 65536 n ulong to ulong
+rcheck le n get r_len 0
+hits = ulong 0
+found = ulong 0
+for pos ulong add sub get r_len 0 n 1
+if umatch b n pos
+hits = add hits 1
+found = pos
+end
+end
+rcheck eq hits 1
+ret found
+end
+fn umarker b view uchar 65536 n ulong idx ulong to void
+s = ulong 0
+for j ulong idx
+while ne get u_marks s 124 bound 256
+s = add s 1
+end
+s = add s 1
+end
+for j ulong n
+rcheck ne get u_marks add s j 124
+rcheck eq get b j get u_marks add s j
+end
+rcheck eq get u_marks add s n 124
+end
+fn uresult id ulong want ulong marker ulong to void
+b = new uchar 65536 0
+fd = uopen id 2 false
+size = fseek fd 0 2
+rcheck ge size 0
+rcheck eq fseek fd 0 0 0
+if eq id 14
+rcheck eq size 6291360
+else
+rcheck le size 65536
+n = read fd b 0 65536
+rcheck eq n size
+if lt marker 6
+umarker b ulong n marker
+end
+if and ge id 30 le id 33
+rcheck eq size 0
+end
+rwriteall 1 b ulong n
+end
+z = fclose fd
+z = write 1 u_row 0 len u_row
+n = rnumber b 0 id
+put b n 32
+n = rnumber b add n 1 want
+put b n 10
+rwriteall 1 b add n 1
+end
+fn urun id ulong extras ulong want ulong marker ulong to void
+b = new uchar 65536 0
+outid = id
+if eq id 9
+outid = add 30 extras
+end
+fd = fopen u_empty 0 len u_empty 524288 0
+rcheck ge fd 0
+out = uopen outid 2 true
+n = uargs b id extras 120
+ulaunch b n int fd out want
+z = fclose int fd
+z = fclose out
+uresult outid want marker
+end
+fn runits to void
+rbuilder
+rload
+uproduction
+for id ulong 10
+uassemble id
+want = ulong 0
+if and ge id 3 le id 6
+want = 7
+end
+ucompile id want
+end
+urun 0 0 0 0
+urun 2 0 0 6
+urun 8 0 0 3
+for mode ulong 4
+want = ulong 0
+if eq mode 3
+want = 12
+end
+urun 9 mode want 6
+end
+umutate 1 0 20 97
+umutate 1 0 21 109
+umutate 7 9 22 99
+umutate 7 10 23 110
+for id ulong 4
+uassemble add id 10
+ucompile add id 10 0
+marker = add id 1
+if ge id 2
+marker = add id 2
+end
+urun add id 10 0 1 marker
+end
+uassemble 14
+ucompile 14 0
+urun 14 0 0 6
+z = write 1 u_ok 0 len u_ok
+end
+fn ucompiled id ulong want ulong to void
+b = new uchar 65536 0
+z = write 1 u_comp 0 len u_comp
+n = rnumber b 0 id
+put b n 32
+n = rnumber b add n 1 want
+put b n 10
+rwriteall 1 b add n 1
 end

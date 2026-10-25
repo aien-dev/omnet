@@ -1,0 +1,238 @@
+{
+  "scope": "Explicit optional consumer-units mode of the existing qualification/security3/run.om coordinator",
+  "prior_socket_receipt": "receipt.json remains immutable and binds the earlier e090ab9 source snapshot",
+  "runner_source_sha256": "fa154b1e3d12f0947906a4790bbb644d2afce3c70d08bca930ef04ec9dbbd0b9",
+  "runner_binary_sha256": "018cc0bca6f54839c6633970476b89e553197aaf2e203bf82f0c74bdc357dcf2",
+  "compiler_sha256": "734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61",
+  "compiler_source_commit": "acb3f15cdc691b1b046b48b0dad0f9255a12ba4b",
+  "platform": {
+    "os": "Linux",
+    "kernel": "7.0.0-1019-nvidia",
+    "machine": "aarch64",
+    "execution": "NATIVE Linux AArch64"
+  },
+  "command": "QUALIFICATION_RUNNER PINNED_OMC --consumer-units (cwd=consumer repository)",
+  "source_location_note": "Symbols omit private local checkout paths; source and executable hashes bind the actual inputs",
+  "compile_exit": 0,
+  "runner_exit": 0,
+  "production_builder_sha256": "de060005537dac4e2e466b37cffab97bcefdbe7ccd7222f6d5f8112247e7621f",
+  "production_concatenation_sha256": "d8a99f89afc3fa9503f313d6cc03355bf5c9179af73e1e4437272169585f6872",
+  "production_binary_sha256": "9b453c5d806548b3de329753c1e50dce66cee4295f5decbd447c5a6e9b1f5b0c",
+  "composition": "Execute current tools/build-tkad.sh; require exact whole cmd/tkad/main.om suffix and remove it; append actual owner fixtures. Mutants replace exactly one original whole socket/rpc module with the output of the existing owner transformer.",
+  "input_sha256": {
+    "om/quantity/quantity.om": "bb0214be78009c9af59e8fb82f22ed84de4eeba94bdc95a4bffd972d5616da97",
+    "om/quantity/tests.om": "d973a7ca41efc53e5bb44231910b80b9ac461b68aa91f4a354f6c09bfa3162ba",
+    "om/quantity/mutate.om": "c4e7bf75938e6a4ae22c5b405773984465efa646d1a4b08521505b93904471c5",
+    "om/quantity/fixtures/crypto-wrap.om": "92c32dd28633f6351dd2f8f053d5cccf29b97deb325da9a3bf19cb35dfe7e5fe",
+    "om/quantity/fixtures/mixed-scalar.om": "cdb679f250c0b3d5b42f681928fcea5dfb8489a6deb9f2ec268a6c71856f7a46",
+    "om/quantity/fixtures/mixed-quantity.om": "59a911bb47db77179df5e8fdb58787c1895175227aa2a40e08ac50d2d99567e1",
+    "om/quantity/fixtures/mixed-object.om": "040131ca16008126077313036b3bed380cda3c6ff7fcc085e487334880571b67",
+    "om/quantity/fixtures/mixed-slice.om": "5f6d42a7c18b168aa9105af7e308a7df79431691501402771f6c6a400a57c954",
+    "cmd/tkad/security3-quantity/mutate.om": "fff9e1d1c5283af0f0d97bc53bc4e9ed878ff9c925c428f4c27d91f79e0e7f46",
+    "cmd/tkad/socket.om": "8ee67d7205ed573a0c01a8e1719fcf864e9c857485db83fee2c0c81f9e8c091d",
+    "cmd/tkad/rpc.om": "0534b0391b9bf0041837544177202f9b7476df74a584049f443ab4398cfa26ab",
+    "cmd/tkad/security3-quantity/tests.om": "94311187236c23a3767e9456b46dbf4f9b0f450a94a9600ac10a43464f405104",
+    "cmd/tkad/security3-secret/controls.om": "ada4d2bb86badf94aa7795e647fc33021f5a435601ca76e3727c03af8f4f22ed",
+    "cmd/tkad/security3-secret/fixtures.om": "a30e1451e4c340849c45e360aa21863bf0adeb2649298abd4e14027cdefabdb8",
+    "cmd/tkad/security3-secret/main.om": "6efebc0d02ba858c11c617ef64c53835f0c130468d2b728439c01dede4826ae7",
+    "cmd/tkad/main.om": "a2eb9b8ce76cc5c060296b6dd1d76a0e438409eb07c69ceed0c37db51edd714a",
+    "om/quantity/oracle-export.om": "711b65e74c8c6610c25babb4bad5a73d4b1d2ae443d868bac205f104bd6f8609"
+  },
+  "artifacts": {
+    "0": {
+      "source_sha256": "7614bfcab3e2821e071b8b03d99ad1009f57dfbe3dc566c2e97fcb212bbda7df",
+      "binary_sha256": "cc328b083385ae3e2bc695f2a66d52bb8e0b31101005cc894fb7b4636c5dc6ad",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "1": {
+      "source_sha256": "c4e7bf75938e6a4ae22c5b405773984465efa646d1a4b08521505b93904471c5",
+      "binary_sha256": "8078ac96be29235c0a4ff878575afa38bc9619e8c06434d4878cca728a5f4542",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "2": {
+      "source_sha256": "92c32dd28633f6351dd2f8f053d5cccf29b97deb325da9a3bf19cb35dfe7e5fe",
+      "binary_sha256": "6178e84856c15364c07299ee581478b44b2e7fc1f794c36e4c1c52290277a219",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "3": {
+      "source_sha256": "046e8729e6808b5845941cb2591113411ecc54ff54330b3ad20d9ee7268945c9",
+      "binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compile_exit": 7,
+      "executed": false
+    },
+    "4": {
+      "source_sha256": "3f9c4e55552dc320cfa5ed8a8e5581ec5fde0dbe0660b6429c085a82eb0c2bd6",
+      "binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compile_exit": 7,
+      "executed": false
+    },
+    "5": {
+      "source_sha256": "e0956012a52edb290381187f7094f5fe05c3aae86900b84b1373c71dcf4435f8",
+      "binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compile_exit": 7,
+      "executed": false
+    },
+    "6": {
+      "source_sha256": "6a8c33da0ada678ceccd15d7db803174f0bbbdc61cdf9c22970075d4a75ca9b3",
+      "binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compile_exit": 7,
+      "executed": false
+    },
+    "7": {
+      "source_sha256": "fff9e1d1c5283af0f0d97bc53bc4e9ed878ff9c925c428f4c27d91f79e0e7f46",
+      "binary_sha256": "3e501f8baf743adb4ef71700acf0f39cf62e0dcbf69fb2aab5c527bc03520fd3",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "8": {
+      "source_sha256": "f29bdd2838087a25c93ff758bad49621f8f829e85cbd5b0ecac8582f09c2b45d",
+      "binary_sha256": "bbb254f6ee84a197f85669ebdf9ef826ca72109ba6441143c8bbbbea775f2139",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "9": {
+      "source_sha256": "4f124c702204867838a62b70851f25fef9a73e518d85ae12d1b20217be3f9ebd",
+      "binary_sha256": "b9f3b08feb4a9dc27adcf54b991921e93fc2f13a97ee6857076c08311060c304",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "10": {
+      "source_sha256": "823e070d52351c797121931e3d0bfc0f6869f4e5b971bb54f1b2fc0be7513316",
+      "binary_sha256": "51185d80447455201cfbc44afae292df7904818d9d9d753b8edc9281b8728f4a",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "11": {
+      "source_sha256": "7c38cf4da8faf15fe3b8b885d07968cf3cb9e672031929cb7d84197660fbb900",
+      "binary_sha256": "c59af673d93018a6f1122d24c3ef90f1d4ee5d86e3da5fa6aab4cf8029aa1776",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "12": {
+      "source_sha256": "6b3e034623f1b60949b707a7bc75ae5f12b3367c39b507eaf951fbcc577d40da",
+      "binary_sha256": "68eab268a634d69b9e610eab29c893533654a953246279ad400e1fbe6efb96aa",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "13": {
+      "source_sha256": "88b4ae92d0762ab33ad624326d6de8cafc322a502d14968e5011ab4c368901c7",
+      "binary_sha256": "20265f4c334b2a953656a83e93cf98ddc76c1f44d2e24f39cad00be12141e627",
+      "compile_exit": 0,
+      "executed": true
+    },
+    "14": {
+      "source_sha256": "09eb487ce982b60d566576f7c3949ef2632146950597f92da90ef8560ee0e1e9",
+      "binary_sha256": "06af414693ec76840f541ee584cd7877f0400af703012d3d7a715ea070abfdc6",
+      "compile_exit": 0,
+      "executed": true
+    }
+  },
+  "transformed_module_sha256": {
+    "20": "0da2db0c1276eb49e78230726f6e9f40e669ff42468773a8b687c3a3e9e66006",
+    "21": "51d85e0c982b24916450a75f11dd891a5cca00b466af6e29cd5c62eb089b97d7",
+    "22": "e0dd172e222ea4091d9d34f254db959af44f92c59136cec1684755c86b709cdc",
+    "23": "41eb84a233d22217ef7aa371688d6e72965bb42af176f4e547edcde53bbf5e78"
+  },
+  "runtime_cases": [
+    {
+      "id": 0,
+      "expected_exit": 0,
+      "observed_exit": 0,
+      "exact_stdout": "PASS Q1-Q9 runtime; Q2 widths1..8 pairs87380 operations262140\n"
+    },
+    {
+      "id": 2,
+      "expected_exit": 0,
+      "observed_exit": 0,
+      "name": "crypto wrapping"
+    },
+    {
+      "id": 8,
+      "expected_exit": 0,
+      "observed_exit": 0,
+      "exact_stdout": "PASS SC1_CURSOR SC1_NOOP actual consumer calls\n"
+    },
+    {
+      "id": 30,
+      "name": "secret functional mode0",
+      "expected_exit": 0,
+      "observed_exit": 0,
+      "stdout": ""
+    },
+    {
+      "id": 31,
+      "name": "secret functional mode1",
+      "expected_exit": 0,
+      "observed_exit": 0,
+      "stdout": ""
+    },
+    {
+      "id": 32,
+      "name": "secret functional mode2",
+      "expected_exit": 0,
+      "observed_exit": 0,
+      "stdout": ""
+    },
+    {
+      "id": 33,
+      "name": "secret functional mode3",
+      "expected_exit": 12,
+      "observed_exit": 12,
+      "stdout": ""
+    },
+    {
+      "id": 10,
+      "expected_exit": 1,
+      "observed_exit": 1,
+      "exact_stdout": "FAIL Q1_ADD_GUARD\n"
+    },
+    {
+      "id": 11,
+      "expected_exit": 1,
+      "observed_exit": 1,
+      "exact_stdout": "FAIL Q4_MUL_GUARD\n"
+    },
+    {
+      "id": 12,
+      "expected_exit": 1,
+      "observed_exit": 1,
+      "exact_stdout": "FAIL SC1_CURSOR\n"
+    },
+    {
+      "id": 13,
+      "expected_exit": 1,
+      "observed_exit": 1,
+      "exact_stdout": "FAIL SC1_NOOP\n"
+    },
+    {
+      "id": 14,
+      "expected_exit": 0,
+      "observed_exit": 0,
+      "output_bytes": 6291360,
+      "output_sha256": "0841c3b0714b36b46e09a83d036243989b0295b5aa3af68650fa24eca9886bd9",
+      "matched_existing_independent_oracle_corpus_hash": true
+    }
+  ],
+  "evidence_sha256": {
+    "consumer-units.log": "fd08a68d7633f2e297e30457fd531947a6e2359ba2469620ad24c11b1f4ed243",
+    "consumer-exporter.json": "a115d6fb6a96c5edb2fd79a9381a08ab58c29c48336f2ad959a79f76dfbb5be7"
+  },
+  "limits": [
+    "Secret modes1/2 deliberately pass functional tests; no secrecy or scanner claim",
+    "Exporter size enforced by .om coordinator; corpus hash comparison recorded by evidence collection, not an independent rerun of arbitrary-precision semantics",
+    "No daemon/store/schema edits",
+    "No aggregate durable budget or full secret closure",
+    "Existing socket baseline/candidate mode logic retained; this extension run exercised the requested unit mode only",
+    "Independent final review and clean replay remain parent gates"
+  ],
+  "initial_attempt": {
+    "compile_exit": 12,
+    "diagnostic": "omc: line 640: error 12",
+    "cause": "whole-module substitution search retained too many locals",
+    "repair": "split bounded unique-match search into ufind",
+    "counted_as_control": false
+  }
+}

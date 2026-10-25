@@ -1,0 +1,39 @@
+build/tkad
+COMPILE id exit 0 0
+COMPILE id exit 1 0
+COMPILE id exit 2 0
+omc: line 148: error 7
+COMPILE id exit 3 7
+omc: line 149: error 7
+COMPILE id exit 4 7
+omc: line 148: error 7
+COMPILE id exit 5 7
+omc: line 148: error 7
+COMPILE id exit 6 7
+COMPILE id exit 7 0
+COMPILE id exit 8 0
+COMPILE id exit 9 0
+PASS Q1-Q9 runtime; Q2 widths1..8 pairs87380 operations262140
+UNIT id exit 0 0
+UNIT id exit 2 0
+PASS SC1_CURSOR SC1_NOOP actual consumer calls
+UNIT id exit 8 0
+UNIT id exit 30 0
+UNIT id exit 31 0
+UNIT id exit 32 0
+UNIT id exit 33 12
+COMPILE id exit 10 0
+FAIL Q1_ADD_GUARD
+UNIT id exit 10 1
+COMPILE id exit 11 0
+FAIL Q4_MUL_GUARD
+UNIT id exit 11 1
+COMPILE id exit 12 0
+FAIL SC1_CURSOR
+UNIT id exit 12 1
+COMPILE id exit 13 0
+FAIL SC1_NOOP
+UNIT id exit 13 1
+COMPILE id exit 14 0
+UNIT id exit 14 0
+PASS security3 consumer-units: library, four type refusals, crypto, actual consumer, secret modes, four completed mutants, exporter

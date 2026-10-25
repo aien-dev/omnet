@@ -41,7 +41,7 @@ The snapshot observer independently opens the actual file and checks the magic, 
 
 ## Native evidence and measurements
 
-`evidence/receipt.json` binds the exact final sources and binaries. `mode0.log` through `mode5.log` and `matched-final.log` retain the actual output. `snapshots.json` contains base64 of the actual final snapshot files, with SHA256. The native runner exited 0. The deliberate count control exited 41 at assertion 202. The post-rename variant exited exactly 74 without a response, as required. All other daemon shutdowns are intentional SIGKILL followed by an exact wait-status check.
+`evidence/receipt.json` binds the socket qualification source snapshot committed at `e090ab9` and its binaries. Later coordinator extensions have separate receipts; this historical receipt is not relabelled. `mode0.log` through `mode5.log` and `matched-final.log` retain the actual output. `snapshots.json` contains base64 of the actual final snapshot files, with SHA256. The native runner exited 0. The deliberate count control exited 41 at assertion 202. The post-rename variant exited exactly 74 without a response, as required. All other daemon shutdowns are intentional SIGKILL followed by an exact wait-status check.
 
 The final matched run used the same compiler, fixture, two-node/count-two state, request bytes and implicit daemon bounds. Each route has ten warmups and two 100-request batches over fresh serial connections. Samples use monotonic nanoseconds; percentiles are nearest rank. Throughput is the integer floor of requests divided by the measured batch duration. Batch order was baseline then candidate on a shared host; this is not randomized experimental evidence or an SLA.
 
@@ -78,3 +78,38 @@ The preserved `observer-wire-hash-failure.log` is a real failed observer run, no
 | Power loss, storage rollback, cross-namespace writers, hostile same-UID/root, kernel compromise, physical timing | Outside this hosted profile |
 
 Same-UID/root actors and provisioned ancestors remain trusted. NodeID denotes an adapter-asserted relay, not necessarily an AUM signer. TKA authenticates signer keys against retained parent state and applies its existing fork choice. Rename is the publication linearization; directory fsync gates acknowledgement. A later recovery fsync does not prove power-loss durability after writeback EIO. No deployment, merge, whole-service secrecy proof or completion of #3/#673 is claimed.
+
+## Actual consumer and imported quantity unit mode
+
+The same coordinator has an explicit second mode, not another test framework:
+
+```sh
+sh tools/omc.sh
+build/omega-mv/seed/out/omc < qualification/security3/run.om > build/security3-run
+chmod 700 build/security3-run
+build/security3-run "$PWD/build/omega-mv/seed/out/omc" --consumer-units
+```
+
+Run this mode with the **consumer repository as the current directory**. It needs the parent's imported `om/quantity/` fixtures and `cmd/tkad/security3-{quantity,secret}/` files. This qualification-only branch does not pretend those consumer sources exist on the immutable base. The parent may compile this coordinator from its own checkout and execute it with the consumer checkout as cwd.
+
+The coordinator invokes the existing builder, loads its actual `build/tkad.om`, verifies that the complete current `cmd/tkad/main.om` is its exact suffix, and removes only that suffix for fixture composition. Thus the production source list remains owned by `tools/build-tkad.sh`; the coordinator has no second hardcoded production list. It appends the actual owner fixtures, never replicas of handlers or comparators.
+
+All generated files are named `build/security3/unit<PID>-<id>{.om,.log}` or the executable without a suffix, and are created exclusively. Refused compiler output is never executed. Each process status must be the exact expected normal exit, not merely nonzero.
+
+| Artifact ID | Composition / expected result |
+|---|---|
+| 0 | `quantity.om + tests.om`: compile0, run0, exact Q1-Q9 success line |
+| 1 | Existing quantity mutation generator: compile0 |
+| 2 | Existing crypto-wrap fixture: compile0, run0 |
+| 3-6 | Quantity plus mixed scalar, quantity, object, slice fixtures: each compiler7 |
+| 7 | Existing actual-consumer mutation generator: compile0 |
+| 8 | Actual production prefix plus consumer quantity tests: compile0, run0, exact SC1_CURSOR/SC1_NOOP success line |
+| 9; logs30-33 | Actual production prefix plus secret controls, fixtures and main: compile0; modes0/1/2 exit0; constant-valid mode3 exits12 |
+| 10-11 | Existing add/multiply guard transformers applied to actual quantity source, then actual tests: compile0, run1, exact Q1_ADD_GUARD / Q4_MUL_GUARD failure lines |
+| 12-13 | Existing c/n transformers applied to actual socket/rpc source; exactly one whole-module substitution in the actual production prefix, then actual consumer tests: compile0, run1, exact SC1_CURSOR / SC1_NOOP failure lines |
+| 14 | Quantity plus existing oracle exporter: compile0, run0, exactly6,291,360 output bytes retained |
+
+IDs20-23 are the transformed source modules. Both generator executions and subsequent mutant compilations must succeed before their named assertion failures count. Secret early-return modes1/2 intentionally pass functional tests; this is **not** a leakage-scanner or secrecy pass. Exporter output size is checked by this coordinator, not mistaken for an independent semantic oracle; its exact output hash is recorded separately.
+
+`evidence/consumer-units.log` and `consumer-units-receipt.json` bind the actual native run on the parent's consumer checkout. The extended coordinator compiled0 and the unit mode exited0. An initial extension compile hit the pinned register limit in the whole-module matcher; splitting its bounded search into a helper repaired compilation. No production source or existing test was changed by this lane.
+
