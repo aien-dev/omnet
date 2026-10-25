@@ -305,6 +305,11 @@ r = dsfield t d 8
 if and ne r 0 and ne dskind t r 5 and ne dskind t r 6 ne dskind t r 7
 ret 400
 end
+if eq dskind t dsfield t d 8 5
+if eq dsheadmatch t d 0
+ret 409
+end
+end
 r = dsfield t d 7
 if and ne r 0 and ne dskind t r 2 ne dskind t r 7
 ret 400
@@ -329,11 +334,6 @@ end
 end
 if ne tkacommit 0
 ret 400
-end
-if eq dskind t dsfield t d 8 5
-if eq dsheadmatch t d 0
-ret 409
-end
 end
 p = dslit out 0 10
 p = dsputhead out p

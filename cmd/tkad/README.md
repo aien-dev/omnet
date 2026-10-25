@@ -98,9 +98,11 @@ SupportDisablement is retained separately and never disables the authority.
 Pending genesis is not visible in map or bootstrap responses.
 
 Sync uses the authority unit's fork choice, offer sampling and intersection.
-Interactive sync additionally requires the supplied Head to equal the resulting
-chosen head; mismatch rejects the candidate. Noninteractive sync validates the
-head encoding but permits a divergent remote head. Disable requires admin, the
+Interactive sync requires the supplied Head to equal the server's **pre-update**
+head; mismatch rejects before staging. Stock `TailnetLockModify` sends its current
+head with newly generated AUMs, then checks that the reply names its last new AUM.
+Noninteractive sync validates the head encoding but permits a divergent remote
+head. Disable requires admin, the
 current head and a valid bounded secret. A disabled authority remains available
 for bootstrap's disablement secret and cannot be reinitialized in this profile.
 
