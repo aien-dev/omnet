@@ -1,0 +1,637 @@
+note SPDX-License-Identifier: Apache-2.0
+note ed25519.om: Ed25519 signature verification (RFC 8032 section 5.1.7), verification only.
+note Two rule sets, chosen by mode: 0 strict = Go crypto/ed25519.Verify, 1 consensus = ZIP 215 as in
+note github.com/hdevalence/ed25519consensus. Needs the sibling unit om/sha512/sha512.om (s512pre)
+note concatenated before this file. Library unit: functions only, no main, no globals.
+note Variable time: every input is public (key, message, signature). NOT constant-time-audited.
+note
+note Field GF(2^255-19): 16 limbs of radix 2^16 held in ulong cells (TweetNaCl layout, but unsigned).
+note Every field element lives in one workspace w (ulong 1024) at a slot offset; functions take
+note offsets so one array is passed and no two names alias. Limb bounds (see README):
+note   mul output: limbs <= 65535 except limb 0 <= 65573;
+note   sub adds 8p limbwise before subtracting, so it never wraps while the subtrahend is a mul output,
+note   a canonical value, or a sum of two of those; edfsub traps 9 if a subtrahend limb exceeds the
+note   8p limb; mul inputs must be below 2^21 per limb (edfmul traps 10 otherwise), so a column sum
+note   is below 16 * 2^42 and the folded sum (times 39) below 2^52: no ulong ever wraps.
+note Signed arithmetic (scalar reduction mod L, edmodl) traps on overflow instead of wrapping.
+
+note workspace slots (ulong offsets into w)
+const edzero ulong 0
+const edone ulong 16
+const edd ulong 32
+const edd2 ulong 48
+const edsqm1 ulong 64
+const edbp ulong 80
+const edna ulong 144
+const edba ulong 208
+const edq ulong 272
+const edrr ulong 336
+const edta ulong 400
+const edtb ulong 416
+const edtc ulong 432
+const edtd ulong 448
+const edte ulong 464
+const edtf ulong 480
+const edtg ulong 496
+const edth ulong 512
+const edtt ulong 528
+const edp0 ulong 544
+const edp1 ulong 560
+const edp2 ulong 576
+const edp3 ulong 592
+const edp4 ulong 608
+const edu ulong 624
+const edv ulong 640
+const edv3 ulong 656
+const edr ulong 672
+const edck ulong 688
+const edx ulong 704
+const edlimb ulong 2097152
+
+note constants: 1, d, 2d, sqrt(-1) (RFC 8032 section 5.1), base point B (RFC 8032 section 5.1) as
+note extended coordinates X Y Z=1 T=XY; decimal radix-2^16 limbs, least significant first
+fn edinit w edit ulong 1024 to void
+put w 16 1
+put w 32 30883
+put w 33 4953
+put w 34 19914
+put w 35 30187
+put w 36 55467
+put w 37 16705
+put w 38 2637
+put w 39 112
+put w 40 59544
+put w 41 30585
+put w 42 16505
+put w 43 36039
+put w 44 65139
+put w 45 11119
+put w 46 27886
+put w 47 20995
+put w 48 61785
+put w 49 9906
+put w 50 39828
+put w 51 60374
+put w 52 45398
+put w 53 33411
+put w 54 5274
+put w 55 224
+put w 56 53552
+put w 57 61171
+put w 58 33010
+put w 59 6542
+put w 60 64743
+put w 61 22239
+put w 62 55772
+put w 63 9222
+put w 64 41136
+put w 65 18958
+put w 66 6951
+put w 67 50414
+put w 68 58488
+put w 69 44335
+put w 70 6150
+put w 71 12099
+put w 72 55207
+put w 73 15867
+put w 74 153
+put w 75 11085
+put w 76 57099
+put w 77 20417
+put w 78 9344
+put w 79 11139
+put w 80 54554
+put w 81 36645
+put w 82 11616
+put w 83 51542
+put w 84 42930
+put w 85 38181
+put w 86 51040
+put w 87 26924
+put w 88 56412
+put w 89 64982
+put w 90 57905
+put w 91 49316
+put w 92 21502
+put w 93 52590
+put w 94 14035
+put w 95 8553
+put w 96 26200
+put w 97 26214
+put w 98 26214
+put w 99 26214
+put w 100 26214
+put w 101 26214
+put w 102 26214
+put w 103 26214
+put w 104 26214
+put w 105 26214
+put w 106 26214
+put w 107 26214
+put w 108 26214
+put w 109 26214
+put w 110 26214
+put w 111 26214
+put w 128 56739
+put w 129 42423
+put w 130 35507
+put w 131 28126
+put w 132 21237
+put w 133 30545
+put w 134 40832
+put w 135 8432
+put w 136 58237
+put w 137 25771
+put w 138 20110
+put w 139 26346
+put w 140 30309
+put w 141 55179
+put w 142 24335
+put w 143 26503
+put w 112 1
+end
+
+note copy n cells from offset a to offset o
+fn edfcpy w edit ulong 1024 o ulong a ulong n ulong to void
+for i ulong n
+put w add o i get w add a i
+end
+end
+
+note o = a + b limbwise, no carry
+fn edfadd w edit ulong 1024 o ulong a ulong b ulong to void
+for i ulong 16
+put w add o i add get w add a i get w add b i
+end
+end
+
+note limb i of 8p = 8 * (2^255 - 19) in radix 2^16: 8*65517, 8*65535 (x14), 8*32767
+fn ed8p i ulong to ulong
+if eq i 0
+ret 524136
+end
+if eq i 15
+ret 262136
+end
+ret 524280
+end
+
+note o = a + 8p - b limbwise; trap 9 if a subtrahend limb is above the 8p limb (cannot happen for
+note the call sites below; the check makes a broken bound stop instead of wrapping)
+fn edfsub w edit ulong 1024 o ulong a ulong b ulong to void
+for i ulong 16
+k = ed8p i
+y = get w add b i
+if gt y k
+trap 9
+end
+put w add o i sub add get w add a i k y
+end
+end
+
+note one carry pass over 16 limbs; the carry out of limb 15 (weight 2^256 = 38 mod p) folds into limb 0
+fn edfcar t edit ulong 16 to void
+for i ulong 15
+put t add i 1 add get t add i 1 shr get t i 16
+put t i and get t i 65535
+end
+c = shr get t 15 16
+put t 15 and get t 15 65535
+put t 0 add get t 0 mul c 38
+end
+
+note o = a * b mod p (o may equal a or b); trap 10 if an input limb is 2^21 or more
+fn edfmul w edit ulong 1024 o ulong a ulong b ulong to void
+t = new ulong 32 0
+c = new ulong 16 0
+for j ulong 16
+y = get w add b j
+if ge y edlimb
+trap 10
+end
+put c j y
+end
+for i ulong 16
+x = get w add a i
+if ge x edlimb
+trap 10
+end
+for j ulong 16
+q = add i j
+put t q add get t q mul x get c j
+end
+end
+r = new ulong 16 0
+for i ulong 15
+put r i add get t i mul 38 get t add i 16
+end
+put r 15 get t 15
+edfcar r
+edfcar r
+for i ulong 16
+put w add o i get r i
+end
+end
+
+note o = a^(2^n), n >= 1
+fn edfsqn w edit ulong 1024 o ulong a ulong n ulong to void
+edfmul w o a a
+for i ulong sub n 1
+edfmul w o o o
+end
+end
+
+note canonical limbs of slot a into t: full carries, then subtract p while the value is >= p
+fn edfcan w edit ulong 1024 a ulong t edit ulong 16 to void
+for i ulong 16
+put t i get w add a i
+end
+edfcar t
+edfcar t
+while gt get t 0 65535 bound 8
+edfcar t
+end
+m = new ulong 16 0
+for r ulong 2
+bw = ulong 0
+for i ulong 16
+pl = div ed8p i 8
+v = sub sub add get t i 65536 pl bw
+put m i and v 65535
+bw = sub 1 shr v 16
+end
+if eq bw 0
+for i ulong 16
+put t i get m i
+end
+end
+end
+end
+
+note o = canonical form of a
+fn edfnorm w edit ulong 1024 o ulong a ulong to void
+t = new ulong 16 0
+edfcan w a t
+for i ulong 16
+put w add o i get t i
+end
+end
+
+note 1 when a = b mod p
+fn edfeq w edit ulong 1024 a ulong b ulong to ulong
+s = new ulong 16 0
+t = new ulong 16 0
+edfcan w a s
+edfcan w b t
+for i ulong 16
+if ne get s i get t i
+ret 0
+end
+end
+ret 1
+end
+
+note o = z^(2^250 - 1), e = z^11 (addition chain of ref10 fe_pow22523 / fe_invert); uses edp0..edp2
+fn edf250 w edit ulong 1024 o ulong e ulong z ulong to void
+edfmul w edp0 z z
+edfmul w edp1 edp0 edp0
+edfmul w edp1 edp1 edp1
+edfmul w edp1 z edp1
+edfmul w e edp0 edp1
+edfmul w edp0 e e
+edfmul w edp0 edp1 edp0
+edfsqn w edp1 edp0 5
+edfmul w edp0 edp1 edp0
+edfsqn w edp1 edp0 10
+edfmul w edp1 edp1 edp0
+edfsqn w edp2 edp1 20
+edfmul w edp1 edp2 edp1
+edfsqn w edp1 edp1 10
+edfmul w edp0 edp1 edp0
+edfsqn w edp1 edp0 50
+edfmul w edp1 edp1 edp0
+edfsqn w edp2 edp1 100
+edfmul w edp1 edp2 edp1
+edfsqn w edp1 edp1 50
+edfmul w o edp1 edp0
+end
+
+note o = a^(p-2) = 1/a (0 for a = 0)
+fn edfinv w edit ulong 1024 o ulong a ulong to void
+edf250 w edp4 edp3 a
+edfsqn w edp4 edp4 5
+edfmul w o edp4 edp3
+end
+
+note o = a^((p-5)/8) = a^(2^252 - 3)
+fn edfp58 w edit ulong 1024 o ulong a ulong to void
+edf250 w edp4 edp3 a
+edfsqn w edp4 edp4 2
+edfmul w o edp4 a
+end
+
+note slot o = the 32 little-endian bytes of b with the top bit cleared; values p..2^255-1 are kept
+note (they are reduced mod p by later arithmetic), as Go field.Element.SetBytes does
+fn edfbytes w edit ulong 1024 o ulong b view uchar 32 to void
+for i ulong 16
+lo = ulong get b mul i 2
+hi = ulong get b add mul i 2 1
+put w add o i or lo shl hi 8
+end
+put w add o 15 and get w add o 15 32767
+end
+
+note decode 32 bytes into the extended point at slot pt; 1 ok, 0 not a point. Go edwards25519
+note Point.SetBytes: y = bytes mod p (non-canonical y accepted), x = +sqrt((y^2-1)/(d y^2+1)) via
+note field.Element.SqrtRatio, negated when bit 255 is set (x = 0 with bit 255 set is accepted).
+fn edpdec w edit ulong 1024 pt ulong b view uchar 32 to ulong
+y = add pt 16
+edfbytes w y b
+edfmul w edu y y
+edfmul w edv edu edd
+edfadd w edv edv edone
+edfsub w edu edu edone
+edfnorm w edu edu
+edfmul w edv3 edv edv
+edfmul w edv3 edv3 edv
+edfmul w edr edv3 edv3
+edfmul w edr edr edv
+edfmul w edr edr edu
+edfp58 w edr edr
+edfmul w edr edr edv3
+edfmul w edr edr edu
+edfmul w edck edr edr
+edfmul w edck edck edv
+if eq edfeq w edck edu 0
+edfsub w edx edzero edu
+if eq edfeq w edck edx 0
+ret 0
+end
+edfmul w edr edr edsqm1
+end
+edfnorm w edx edr
+sign = shr ulong get b 31 7
+if ne and get w edx 1 sign
+edfsub w edx edzero edx
+edfnorm w edx edx
+end
+edfcpy w pt edx 16
+edfcpy w add pt 32 edone 16
+edfmul w add pt 48 edx y
+ret 1
+end
+
+note p = -p (negate X and T); the results are brought back to canonical limbs so that every stored
+note coordinate stays a valid subtrahend for edfsub
+fn edpneg w edit ulong 1024 p ulong to void
+edfsub w p edzero p
+edfnorm w p p
+t = add p 48
+edfsub w t edzero t
+edfnorm w t t
+end
+
+note p = p + q, extended coordinates, add-2008-hwcd-3 (TweetNaCl add), complete for Ed25519
+fn edpadd w edit ulong 1024 p ulong q ulong to void
+py = add p 16
+qy = add q 16
+edfsub w edta py p
+edfsub w edtt qy q
+edfmul w edta edta edtt
+edfadd w edtb p py
+edfadd w edtt q qy
+edfmul w edtb edtb edtt
+edfmul w edtc add p 48 add q 48
+edfmul w edtc edtc edd2
+edfmul w edtd add p 32 add q 32
+edfadd w edtd edtd edtd
+edfsub w edte edtb edta
+edfsub w edtf edtd edtc
+edfadd w edtg edtd edtc
+edfadd w edth edtb edta
+edfmul w p edte edtf
+edfmul w py edth edtg
+edfmul w add p 32 edtg edtf
+edfmul w add p 48 edte edth
+end
+
+note p = 2p, dbl-2008-hwcd with a = -1, every output coordinate negated (same projective point):
+note A = X^2, B = Y^2, C = 2Z^2, H = A + B, E = (X+Y)^2 - H, G = B - A, F = C + A - B,
+note X = E F, Y = G H, T = E H, Z = F G
+fn edpdbl w edit ulong 1024 p ulong to void
+py = add p 16
+edfmul w edta p p
+edfmul w edtb py py
+edfmul w edtc add p 32 add p 32
+edfadd w edtc edtc edtc
+edfadd w edth edta edtb
+edfadd w edte p py
+edfmul w edte edte edte
+edfsub w edte edte edth
+edfsub w edtg edtb edta
+edfadd w edtf edtc edta
+edfsub w edtf edtf edtb
+edfmul w p edte edtf
+edfmul w py edtg edth
+edfmul w add p 48 edte edth
+edfmul w add p 32 edtf edtg
+end
+
+note canonical encoding of point p (RFC 8032 section 5.1.2): y, with bit 255 = x mod 2
+fn edpenc w edit ulong 1024 p ulong o edit uchar 32 to void
+edfinv w edu add p 32
+edfmul w edv p edu
+edfmul w edv3 add p 16 edu
+edfnorm w edv edv
+edfnorm w edv3 edv3
+for i ulong 16
+v = get w add edv3 i
+put o mul i 2 uchar and v 255
+put o add mul i 2 1 uchar shr v 8
+end
+put o 31 or get o 31 uchar shl and get w edv 1 7
+end
+
+note 1 when p is the identity (X = 0 and Y = Z), as Go Point.Equal(NewIdentityPoint())
+fn edpid w edit ulong 1024 p ulong to ulong
+if eq edfeq w p edzero 0
+ret 0
+end
+ret edfeq w add p 16 add p 32
+end
+
+note bit i of the 32-byte little-endian scalar b
+fn edbit b view uchar 32 i ulong to ulong
+ret and shr ulong get b shr i 3 and i 7 1
+end
+
+note q = [s]B + [k]P where P is the point at edna; joint double-and-add from bit 252
+note (s < L and k < L are below 2^253), with B + P precomputed at edba
+fn edsmul w edit ulong 1024 s view uchar 32 k view uchar 32 to void
+edfcpy w edba edbp 64
+edpadd w edba edna
+edfcpy w edq edzero 64
+edfcpy w add edq 16 edone 16
+edfcpy w add edq 32 edone 16
+for j ulong 253
+i = sub 252 j
+edpdbl w edq
+sb = edbit s i
+kb = edbit k i
+if eq sb 1
+if eq kb 1
+edpadd w edq edba
+else
+edpadd w edq edbp
+end
+else
+if eq kb 1
+edpadd w edq edna
+end
+end
+end
+end
+
+note the group order L = 2^252 + 27742317777372353535851937790883648493 as 32 little-endian bytes
+fn edlset l edit long 32 to void
+put l 0 237
+put l 1 211
+put l 2 245
+put l 3 92
+put l 4 26
+put l 5 99
+put l 6 18
+put l 7 88
+put l 8 214
+put l 9 156
+put l 10 247
+put l 11 162
+put l 12 222
+put l 13 249
+put l 14 222
+put l 15 20
+put l 31 16
+end
+
+note 1 when the 32-byte little-endian scalar s is below L (Go Scalar.SetCanonicalBytes / isReduced)
+fn edsclt s view uchar 32 to ulong
+l = new long 32 0
+edlset l
+i = ulong 32
+while gt i 0 bound 33
+i = sub i 1
+a = long get s i
+b = get l i
+if lt a b
+ret 1
+end
+if gt a b
+ret 0
+end
+end
+ret 0
+end
+
+note x[0..32) = x mod L as bytes, for the 64 bytes x[0..64) (TweetNaCl modL, signed limbs; any
+note overflow traps)
+fn edmodl x edit long 64 to void
+l = new long 32 0
+edlset l
+i = long 63
+while ge i 32 bound 33
+carry = long 0
+b = sub i 32
+q = mul 16 get x i
+j = b
+while lt j sub i 12 bound 21
+lj = get l sub j b
+v = sub add get x j carry mul q lj
+carry = shr add v 128 8
+put x j sub v mul carry 256
+j = add j 1
+end
+put x j add get x j carry
+put x i 0
+i = sub i 1
+end
+carry = long 0
+for j ulong 32
+v = add get x j sub carry mul shr get x 31 4 get l j
+carry = shr v 8
+put x j and v 255
+end
+for j ulong 32
+put x j sub get x j mul carry get l j
+end
+for j ulong 32
+put x add j 1 add get x add j 1 shr get x j 8
+put x j and get x j 255
+end
+end
+
+note k = SHA-512(R || A || M) mod L (RFC 8032 section 5.1.7 step 2)
+fn edhram sg view uchar 64 pk view uchar 32 m view uchar 65536 n ulong k edit uchar 32 to void
+pre = new uchar 64 0
+for i ulong 32
+put pre i get sg i
+put pre add i 32 get pk i
+end
+hd = new uchar 64 0
+s512pre pre m n hd
+x = new long 64 0
+for i ulong 64
+put x i long get hd i
+end
+edmodl x
+for i ulong 32
+put k i uchar get x i
+end
+end
+
+note Ed25519 verification. pk: 32-byte public key A; m[0..n): message, n <= 65536 (else trap 3 in
+note s512pre); sg: 64-byte signature R || S; mode 0 strict (Go crypto/ed25519.Verify), mode 1
+note consensus (ZIP 215, ed25519consensus.Verify); any other mode traps 11. Returns 1 valid, 0 invalid.
+fn edverify pk view uchar 32 m view uchar 65536 n ulong sg view uchar 64 mode ulong to ulong
+if gt mode 1
+trap 11
+end
+s = new uchar 32 0
+rb = new uchar 32 0
+k = new uchar 32 0
+e = new uchar 32 0
+w = new ulong 1024 0
+for i ulong 32
+put rb i get sg i
+put s i get sg add i 32
+end
+if eq edsclt s 0
+ret 0
+end
+edinit w
+if eq edpdec w edna pk 0
+ret 0
+end
+edpneg w edna
+if eq mode 1
+if eq edpdec w edrr rb 0
+ret 0
+end
+end
+edhram sg pk m n k
+edsmul w s k
+if eq mode 0
+edpenc w edq e
+for i ulong 32
+if ne get e i get rb i
+ret 0
+end
+end
+ret 1
+end
+edpneg w edrr
+edpadd w edq edrr
+edpdbl w edq
+edpdbl w edq
+edpdbl w edq
+ret edpid w edq
+end

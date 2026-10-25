@@ -1,0 +1,4 @@
+/build/
+.crumb
+__pycache__/
+*.pyc

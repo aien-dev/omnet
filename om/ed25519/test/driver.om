@@ -1,0 +1,216 @@
+note SPDX-License-Identifier: Apache-2.0
+note driver.om: test driver for om/ed25519 (program mode). Concatenated after sha512.om and
+note ed25519.om. Reads a vector file on stdin, one case per line:
+note   ES EC PKHEX SIGHEX MSGHEX
+note ES / EC: expected result in strict (mode 0) / consensus (mode 1) mode, 0 or 1, or - to skip
+note that mode; PKHEX 64 hex digits; SIGHEX 128 hex digits; MSGHEX 0..131072 hex digits.
+note Lines starting with # are comments. Optional argument: repeat count R (each check runs R
+note times; for timing). Prints one MISMATCH line per wrong result and a summary line:
+note   cases C verifies V mismatches X ns T
+note Exit 0 only when at least one verify ran and none mismatched; 1 otherwise; 65 bad input.
+
+text tmis "MISMATCH line "
+text tmode " mode "
+text tgot " got "
+text tcase "cases "
+text tver " verifies "
+text tmm " mismatches "
+text tns " ns "
+text tnl "\n"
+text tbad "driver: bad input\n"
+
+global dvin uchar 16777216
+global dvlen ulong 1
+global dvout uchar 32
+global dvarg uchar 32
+global dvcnt ulong 8
+
+fn dvnum v ulong to void
+k = ulong 0
+x = v
+while true bound 30
+put dvout sub 31 k uchar add rem x 10 48
+k = add k 1
+x = div x 10
+if eq x 0
+break
+end
+end
+r = write 1 dvout sub 32 k k
+end
+
+fn dvnib c ulong to ulong
+if and ge c 48 le c 57
+ret sub c 48
+end
+if and ge c 97 le c 102
+ret sub c 87
+end
+if and ge c 65 le c 70
+ret sub c 55
+end
+r = write 2 tbad 0 len tbad
+exit 65
+end
+
+fn dvbyte o ulong to uchar
+hi = dvnib ulong get dvin o
+lo = dvnib ulong get dvin add o 1
+ret uchar or shl hi 4 lo
+end
+
+fn dvpk a edit uchar 32 o ulong to void
+for i ulong 32
+put a i dvbyte add o mul i 2
+end
+end
+
+fn dvsig a edit uchar 64 o ulong to void
+for i ulong 64
+put a i dvbyte add o mul i 2
+end
+end
+
+note message hex from o to the newline e; returns the byte count
+fn dvmsg a edit uchar 65536 o ulong e ulong to ulong
+h = sub e o
+if ne and h 1 0
+r = write 2 tbad 0 len tbad
+exit 65
+end
+c = div h 2
+for i ulong c
+put a i dvbyte add o mul i 2
+end
+ret c
+end
+
+note expectation character at o: 0, 1, or 2 for skip
+fn dvexp o ulong to ulong
+c = get dvin o
+if eq c 48
+ret 0
+end
+if eq c 49
+ret 1
+end
+if eq c 45
+ret 2
+end
+r = write 2 tbad 0 len tbad
+exit 65
+end
+
+fn dvslurp to void
+t = ulong 0
+while true bound 999999
+room = sub len dvin t
+if eq room 0
+r = write 2 tbad 0 len tbad
+exit 65
+end
+r = read 0 dvin t room
+if lt r 0
+r = write 2 tbad 0 len tbad
+exit 65
+end
+if eq r 0
+break
+end
+t = add t ulong r
+end
+put dvlen 0 t
+end
+
+fn dvreps to ulong
+if lt argcnt 2
+ret 1
+end
+l = argread 1 dvarg 0 20
+v = ulong 0
+for i ulong ulong l
+v = add mul v 10 sub ulong get dvarg i 48
+end
+ret v
+end
+
+fn dvmis line ulong mode ulong got ulong to void
+r = write 1 tmis 0 len tmis
+dvnum line
+r = write 1 tmode 0 len tmode
+dvnum mode
+r = write 1 tgot 0 len tgot
+dvnum got
+r = write 1 tnl 0 1
+end
+
+note counters in dvcnt: 0 line, 1 cases, 2 verifies, 3 mismatches, 4 ns, 5 repeat count
+fn dvbump i ulong v ulong to void
+put dvcnt i add get dvcnt i v
+end
+
+note run one check (mode md, expected x) the repeat count of times
+fn dvrun pk view uchar 32 sg view uchar 64 m view uchar 65536 n ulong md ulong x ulong to void
+for k ulong get dvcnt 5
+t0 = monons
+got = edverify pk m n sg md
+dvbump 4 ulong sub monons t0
+dvbump 2 1
+if ne got x
+dvbump 3 1
+dvmis get dvcnt 0 md got
+end
+end
+end
+
+note the case on dvin[p..e), e at its newline
+fn dvline pk edit uchar 32 sg edit uchar 64 m edit uchar 65536 p ulong e ulong to void
+if lt sub e p 198
+r = write 2 tbad 0 len tbad
+exit 65
+end
+dvbump 1 1
+dvpk pk add p 4
+dvsig sg add p 69
+n = dvmsg m add p 198 e
+for md ulong 2
+x = dvexp add p mul md 2
+if ne x 2
+dvrun pk sg m n md x
+end
+end
+end
+
+fn main to int
+pk = new uchar 32 0
+sg = new uchar 64 0
+m = new uchar 65536 0
+dvslurp
+put dvcnt 5 dvreps
+tot = get dvlen 0
+p = ulong 0
+while lt p tot bound 999999
+dvbump 0 1
+e = p
+while ne get dvin e 10 bound 999999
+e = add e 1
+end
+if ne get dvin p 35
+dvline pk sg m p e
+end
+p = add e 1
+end
+r = write 1 tcase 0 len tcase
+dvnum get dvcnt 1
+r = write 1 tver 0 len tver
+dvnum get dvcnt 2
+r = write 1 tmm 0 len tmm
+dvnum get dvcnt 3
+r = write 1 tns 0 len tns
+dvnum get dvcnt 4
+r = write 1 tnl 0 1
+if or gt get dvcnt 3 0 eq get dvcnt 2 0
+ret 1
+end
+ret 0
+end

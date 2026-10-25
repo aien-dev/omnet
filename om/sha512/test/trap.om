@@ -1,0 +1,9 @@
+note SPDX-License-Identifier: Apache-2.0
+note trap.om: concatenated after sha512.om. A length one past the capacity (65537) must trap 3,
+note so this program exits 103 (trap 3 -> exit 100 + 3) and never reaches ret 0.
+fn main to int
+m = new uchar 65536 0
+o = new uchar 64 0
+s512hash m 65537 o
+ret 0
+end
