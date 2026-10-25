@@ -1,0 +1,335 @@
+note SPDX-License-Identifier: Apache-2.0
+note driver.om: program-mode test driver for om/blake2s/blake2s.om (concatenated after it).
+note
+note driver           reads case lines from stdin, one digest line per case on stdout:
+note                    OUTN KEY MSG\n
+note                  OUTN decimal 1..32; KEY and MSG are hex (either case, even digit count) or
+note                  "-" for empty; KEY at most 32 bytes, MSG at most 65536 bytes. Output is
+note                  2*OUTN lowercase hex digits and a newline. Exit 0 at end of input,
+note                  2 on a malformed line (the digests already written stay on stdout).
+note driver selftest  runs the RFC 7693 Appendix E BLAKE2s self-test and prints its grand hash
+note                  (64 hex digits); exit 0 when it equals the RFC value, 1 otherwise.
+
+text tself "selftest"
+
+global ib uchar 65536
+global ist ulong 2
+
+note next input byte, -1 at end of input
+fn getc to int
+if eq get ist 0 get ist 1
+r = read 0 ib 0 65536
+if le r 0
+ret -1
+end
+put ist 0 0
+put ist 1 ulong r
+end
+p = get ist 0
+put ist 0 add p 1
+ret int get ib p
+end
+
+fn hexv c int to int
+if and ge c 48 le c 57
+ret sub c 48
+end
+if and ge c 97 le c 102
+ret sub c 87
+end
+if and ge c 65 le c 70
+ret sub c 55
+end
+ret -1
+end
+
+fn hexd v ulong to uchar
+if lt v 10
+ret uchar add v 48
+end
+ret uchar add v 87
+end
+
+note one byte from two hex digits, the first already read as c; -1 when not hex
+fn hexbyte c int to int
+hi = hexv c
+lo = hexv getc
+if or lt hi 0 lt lo 0
+ret -1
+end
+ret add mul hi 16 lo
+end
+
+note a hex field into a (at most cap bytes) ended by the byte sep; the length, or -1
+fn rdmsg a edit uchar 65536 cap ulong sep int to long
+c = getc
+if eq c 45
+if eq getc sep
+ret 0
+end
+ret -1
+end
+t = ulong 0
+while ne c sep bound 999999
+if ge t cap
+ret -1
+end
+v = hexbyte c
+if lt v 0
+ret -1
+end
+put a t uchar v
+t = add t 1
+c = getc
+end
+if eq t 0
+ret -1
+end
+ret long t
+end
+
+fn rdkey a edit uchar 32 sep int to long
+c = getc
+if eq c 45
+if eq getc sep
+ret 0
+end
+ret -1
+end
+t = ulong 0
+while ne c sep bound 999999
+if ge t 32
+ret -1
+end
+v = hexbyte c
+if lt v 0
+ret -1
+end
+put a t uchar v
+t = add t 1
+c = getc
+end
+if eq t 0
+ret -1
+end
+ret long t
+end
+
+note decimal OUTN ended by a space; -2 at end of input before any byte, -1 when malformed
+fn rdoutn to long
+c = getc
+if eq c -1
+ret -2
+end
+t = long 0
+k = ulong 0
+while ne c 32 bound 16
+d = sub c 48
+if or lt d 0 gt d 9
+ret -1
+end
+if ge k 2
+ret -1
+end
+t = add mul t 10 long d
+k = add k 1
+c = getc
+end
+if or lt t 1 gt t 32
+ret -1
+end
+ret t
+end
+
+note o[0..outn) as lowercase hex and a newline
+fn emit o view uchar 32 outn ulong to void
+h = new uchar 65 0
+for i ulong outn
+v = ulong get o i
+put h mul i 2 hexd shr v 4
+put h add mul i 2 1 hexd and v 15
+end
+put h mul outn 2 10
+r = write 1 h 0 add mul outn 2 1
+if ne r long add mul outn 2 1
+trap 1
+end
+end
+
+fn cases to int
+m = new uchar 65536 0
+k = new uchar 32 0
+o = new uchar 32 0
+while true bound 999999
+on = rdoutn
+if eq on -2
+ret 0
+end
+if lt on 0
+ret 2
+end
+kn = rdkey edit k 32
+if lt kn 0
+ret 2
+end
+n = rdmsg edit m 65536 10
+if lt n 0
+ret 2
+end
+b2shash view m ulong n view k ulong kn ulong on edit o
+emit view o ulong on
+end
+ret 2
+end
+
+note RFC 7693 Appendix E selftest_seq: a = 0xDEAD4BAD * seed, b = 1, out[i] = (a+b) >> 24 (Fibonacci)
+fn seqm a edit uchar 65536 n ulong seed ulong to void
+x = and mul 3735899053 seed 4294967295
+y = ulong 1
+for i ulong n
+t = and add x y 4294967295
+x = y
+y = t
+put a i uchar shr t 24
+end
+end
+
+fn seqk a edit uchar 32 n ulong seed ulong to void
+x = and mul 3735899053 seed 4294967295
+y = ulong 1
+for i ulong n
+t = and add x y 4294967295
+x = y
+y = t
+put a i uchar shr t 24
+end
+end
+
+note RFC 7693 Appendix E md_len and in_len tables
+fn mdlen i ulong to ulong
+if eq i 0
+ret 16
+end
+if eq i 1
+ret 20
+end
+if eq i 2
+ret 28
+end
+ret 32
+end
+
+fn inlen j ulong to ulong
+if eq j 0
+ret 0
+end
+if eq j 1
+ret 3
+end
+if eq j 2
+ret 64
+end
+if eq j 3
+ret 65
+end
+if eq j 4
+ret 255
+end
+ret 1024
+end
+
+note append md[0..n) to g at offset at
+fn append g edit uchar 65536 at ulong md view uchar 32 n ulong to void
+for i ulong n
+put g add at i get md i
+end
+end
+
+note RFC 7693 Appendix E grand-hash bytes 6A 41 1F 08 CE 25 AD CD FB 02 AB A6 41 45 1C EC
+note 53 C5 98 B2 4F 4F C7 87 FB DC 88 79 7F 4C 1D FE
+fn wantres r edit uchar 32 to void
+put r 0 106
+put r 1 65
+put r 2 31
+put r 3 8
+put r 4 206
+put r 5 37
+put r 6 173
+put r 7 205
+put r 8 251
+put r 9 2
+put r 10 171
+put r 11 166
+put r 12 65
+put r 13 69
+put r 14 28
+put r 15 236
+put r 16 83
+put r 17 197
+put r 18 152
+put r 19 178
+put r 20 79
+put r 21 79
+put r 22 199
+put r 23 135
+put r 24 251
+put r 25 220
+put r 26 136
+put r 27 121
+put r 28 127
+put r 29 76
+put r 30 29
+put r 31 254
+end
+
+note the grand hash is BLAKE2s-256 of all 48 digests in order; feeding them one update at a time
+note (as Appendix E does) and hashing their concatenation once give the same digest
+fn selftst to int
+m = new uchar 65536 0
+g = new uchar 65536 0
+k = new uchar 32 0
+md = new uchar 32 0
+r = new uchar 32 0
+at = ulong 0
+for i ulong 4
+ol = mdlen i
+for j ulong 6
+il = inlen j
+seqm edit m il il
+b2shash view m il view k 0 ol edit md
+append edit g at view md ol
+at = add at ol
+seqk edit k ol ol
+b2shash view m il view k ol ol edit md
+append edit g at view md ol
+at = add at ol
+end
+end
+b2shash view g at view k 0 32 edit md
+emit view md 32
+wantres edit r
+bad = ulong 0
+for i ulong 32
+if ne get md i get r i
+bad = 1
+end
+end
+ret int bad
+end
+
+fn main to int
+if eq argcnt 1
+ret cases
+end
+a = new uchar 16 0
+l = argread 1 a 0 16
+if ne l 8
+ret 2
+end
+for i ulong 8
+if ne get a i get tself i
+ret 2
+end
+end
+ret selftst
+end

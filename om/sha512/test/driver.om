@@ -1,0 +1,389 @@
+note SPDX-License-Identifier: Apache-2.0
+note driver.om: program-mode test driver for om/sha512, concatenated after sha512.om.
+note Reads vector records from stdin (at most 16 MiB), one per line, fields separated by one space:
+note   H n MSG MD        MD = SHA-512(MSG), MSG n bytes in hex ("-" when n is 0)
+note   P n PRE MSG MD    MD = SHA-512(PRE || MSG), PRE 64 bytes in hex, checks s512pre
+note   M SEED MD0 .. MD99  NIST CAVP SHA-2 Monte Carlo chain (SHAVS section 6.4), 100 checkpoints
+note Lines that are empty or start with # are skipped; a trailing carriage return is allowed.
+note Prints "FAIL line L" (wrong digest) or "BAD line L" (malformed record) per failure, then
+note "sha512 driver: C checks, F failed". Exit 0 only when F is 0 and C is above 0; exit 1 otherwise;
+note exit 2 when the input cannot be read or exceeds 16 MiB.
+
+global inp uchar 16777216
+global st ulong 8
+global ob uchar 32
+global one uchar 1
+text tfail "FAIL line "
+text tbad "BAD line "
+text tsum "sha512 driver: "
+text tchk " checks, "
+text tfld " failed\n"
+text tnl "\n"
+text tio "sha512 driver: cannot read input or input over 16 MiB\n"
+
+note st: 0 input length, 1 cursor, 2 line number (1-based), 3 malformed flag
+
+note read all of stdin into inp; 0 ok, 2 read error or over capacity
+fn dslurp to int
+t = ulong 0
+while true bound 999999
+room = sub len inp t
+if eq room 0
+r = read 0 one 0 1
+if ne r 0
+ret 2
+end
+break
+end
+r = read 0 inp t room
+if lt r 0
+ret 2
+end
+if eq r 0
+break
+end
+t = add t ulong r
+end
+put st 0 t
+ret 0
+end
+
+note byte at the cursor, or 256 at the end of input
+fn dpeek to ulong
+c = get st 1
+if ge c get st 0
+ret 256
+end
+ret ulong get inp c
+end
+
+fn dadv to void
+put st 1 add get st 1 1
+end
+
+fn dbad to void
+put st 3 1
+end
+
+note the value of hex digit c, or 16 when c is not one
+fn dhexv c ulong to ulong
+if ge c 48
+if le c 57
+ret sub c 48
+end
+end
+if ge c 97
+if le c 102
+ret sub c 87
+end
+end
+if ge c 65
+if le c 70
+ret sub c 55
+end
+end
+ret 16
+end
+
+note one byte from two hex digits at the cursor (malformed flag on a bad digit)
+fn dbyte to uchar
+hi = dhexv dpeek
+dadv
+lo = dhexv dpeek
+dadv
+if gt hi 15
+dbad
+ret 0
+end
+if gt lo 15
+dbad
+ret 0
+end
+ret uchar or shl hi 4 lo
+end
+
+fn dspace to void
+if ne dpeek 32
+dbad
+ret
+end
+dadv
+end
+
+note a decimal number at the cursor (at most 9 digits)
+fn dnum to ulong
+v = ulong 0
+k = ulong 0
+while true bound 10
+c = dpeek
+if lt c 48
+break
+end
+if gt c 57
+break
+end
+v = add mul v 10 sub c 48
+k = add k 1
+dadv
+end
+if eq k 0
+dbad
+end
+if gt k 9
+dbad
+end
+ret v
+end
+
+note n bytes of hex into a[0..n); n 0 is written "-"
+fn dhexm a edit uchar 65536 n ulong to void
+if eq n 0
+if ne dpeek 45
+dbad
+ret
+end
+dadv
+ret
+end
+for i ulong n
+put a i dbyte
+end
+end
+
+fn dhex64 a edit uchar 64 to void
+for i ulong 64
+put a i dbyte
+end
+end
+
+note end of record: an optional carriage return, then a newline or the end of input
+fn deor to void
+if eq dpeek 13
+dadv
+end
+c = dpeek
+if eq c 10
+dadv
+ret
+end
+if ne c 256
+dbad
+end
+end
+
+note skip the rest of the line, newline included
+fn dskip to void
+while true bound 999999
+c = dpeek
+if eq c 256
+ret
+end
+dadv
+if eq c 10
+ret
+end
+end
+end
+
+note 0 when a and b hold the same 64 bytes
+fn dcmp a view uchar 64 b view uchar 64 to ulong
+d = ulong 0
+for i ulong 64
+if ne get a i get b i
+d = 1
+end
+end
+ret d
+end
+
+note write v in decimal to stdout
+fn dprn v ulong to void
+x = v
+k = ulong 0
+while true bound 21
+put ob sub 31 k uchar add 48 rem x 10
+k = add k 1
+x = div x 10
+if eq x 0
+break
+end
+end
+r = write 1 ob sub 32 k k
+end
+
+fn dmsg bad ulong ln ulong to void
+if eq bad 1
+r = write 1 tbad 0 len tbad
+else
+r = write 1 tfail 0 len tfail
+end
+dprn ln
+r = write 1 tnl 0 1
+end
+
+note H record after the tag; 0 pass, 1 wrong digest, 2 malformed
+fn drech msg edit uchar 65536 dig edit uchar 64 ex edit uchar 64 to ulong
+dspace
+n = dnum
+if gt n 65536
+dbad
+ret 2
+end
+dspace
+dhexm msg n
+dspace
+dhex64 ex
+deor
+if eq get st 3 1
+ret 2
+end
+s512hash msg n dig
+ret dcmp dig ex
+end
+
+note P record after the tag
+fn drecp msg edit uchar 65536 dig edit uchar 64 ex edit uchar 64 pre edit uchar 64 to ulong
+dspace
+n = dnum
+if gt n 65536
+dbad
+ret 2
+end
+dspace
+dhex64 pre
+dspace
+dhexm msg n
+dspace
+dhex64 ex
+deor
+if eq get st 3 1
+ret 2
+end
+s512pre pre msg n dig
+ret dcmp dig ex
+end
+
+note M record after the tag: SHAVS Monte Carlo. For j = 0..99: MD0 = MD1 = MD2 = Seed; for i = 3..1002
+note MDi = SHA-512(MD(i-3) || MD(i-2) || MD(i-1)); checkpoint j is MD1002, which is also the next Seed.
+note msg[0..192) holds the three previous digests. Returns the number of failed checkpoints; the
+note malformed flag is set on a parse error.
+fn drecm msg edit uchar 65536 dig edit uchar 64 ex edit uchar 64 sd edit uchar 64 to ulong
+fl = ulong 0
+dspace
+dhex64 sd
+for j ulong 100
+for i ulong 64
+put msg i get sd i
+put msg add i 64 get sd i
+put msg add i 128 get sd i
+end
+for c ulong 1000
+s512hash msg 192 dig
+for i ulong 128
+put msg i get msg add i 64
+end
+for i ulong 64
+put msg add i 128 get dig i
+end
+end
+dspace
+dhex64 ex
+if ne dcmp dig ex 0
+fl = add fl 1
+end
+for i ulong 64
+put sd i get dig i
+end
+end
+deor
+ret fl
+end
+
+fn main to int
+msg = new uchar 65536 0
+dig = new uchar 64 0
+ex = new uchar 64 0
+pre = new uchar 64 0
+if ne dslurp 0
+r = write 2 tio 0 len tio
+ret 2
+end
+put st 1 0
+put st 2 0
+chk = ulong 0
+fl = ulong 0
+while lt get st 1 get st 0 bound 999999
+put st 2 add get st 2 1
+ln = get st 2
+put st 3 0
+put st 4 get st 1
+c = dpeek
+if eq c 72
+dadv
+res = drech msg dig ex
+chk = add chk 1
+if ne res 0
+fl = add fl 1
+dmsg get st 3 ln
+end
+else
+if eq c 80
+dadv
+res = drecp msg dig ex pre
+chk = add chk 1
+if ne res 0
+fl = add fl 1
+dmsg get st 3 ln
+end
+else
+if eq c 77
+dadv
+res = drecm msg dig ex pre
+chk = add chk 100
+fl = add fl res
+if eq get st 3 1
+fl = add fl 1
+dmsg 1 ln
+else
+if ne res 0
+dmsg 0 ln
+end
+end
+else
+if eq c 35
+dskip
+else
+if eq c 10
+dadv
+else
+if eq c 13
+dskip
+else
+chk = add chk 1
+fl = add fl 1
+dmsg 1 ln
+dskip
+end
+end
+end
+end
+end
+end
+if eq get st 3 1
+put st 1 get st 4
+dskip
+end
+end
+r = write 1 tsum 0 len tsum
+dprn chk
+r = write 1 tchk 0 len tchk
+dprn fl
+r = write 1 tfld 0 len tfld
+if ne fl 0
+ret 1
+end
+if eq chk 0
+ret 1
+end
+ret 0
+end

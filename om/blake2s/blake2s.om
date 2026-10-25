@@ -1,0 +1,201 @@
+note SPDX-License-Identifier: Apache-2.0
+note blake2s.om: BLAKE2s (RFC 7693) in Omega, keyed or unkeyed, digest length 1..32 bytes.
+note Library unit: functions only, no main, no globals. Every name starts with b2s.
+note
+note b2shash m n k kn outn o
+note   m     view uchar 65536   message bytes; only m[0..n) are read
+note   n     ulong              message length, 0..65536
+note   k     view uchar 32      key bytes; only k[0..kn) are read
+note   kn    ulong              key length, 0..32 (0 = unkeyed)
+note   outn  ulong              digest length, 1..32
+note   o     edit uchar 32      o[0..outn) receives the digest, o[outn..32) is set to 0
+note A length outside its range traps 3 (program exit 103) before any output is written.
+note
+note 32-bit words live in ulong cells and are masked to 32 bits after every add and rotate.
+note Working words w (one array: a library unit has no globals):
+note   0..15 v (RFC 7693 3.2), 16..31 m, 32..39 h, 40..47 IV (2.6),
+note   48..57 SIGMA rows (2.7) packed as sixteen 4-bit indexes, entry i in bits 4i..4i+3,
+note   58 byte counter t, 59 SIGMA row of the current round.
+note NOT constant-time-audited: Omega gives no timing guarantee and none was measured.
+
+note RFC 7693 2.6: IV[i] = SHA-256 IV, 6A09E667 BB67AE85 3C6EF372 A54FF53A 510E527F 9B05688C 1F83D9AB 5BE0CD19
+fn b2sinit w edit ulong 64 to void
+put w 40 1779033703
+put w 41 3144134277
+put w 42 1013904242
+put w 43 2773480762
+put w 44 1359893119
+put w 45 2600822924
+put w 46 528734635
+put w 47 1541459225
+note SIGMA[0] 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+put w 48 18364758544493064720
+note SIGMA[1] 14 10 4 8 9 15 13 6 1 12 0 2 11 7 5 3
+put w 49 3853709921291437230
+note SIGMA[2] 11 8 12 0 5 2 15 13 10 14 3 6 7 1 9 4
+put w 50 5266788149650328715
+note SIGMA[3] 7 9 3 1 13 12 11 14 2 6 5 10 4 0 15 8
+put w 51 10305543691612001175
+note SIGMA[4] 9 0 5 7 2 4 10 15 14 1 11 12 6 8 3 13
+put w 52 15242093322790139145
+note SIGMA[5] 2 12 6 10 0 11 8 3 4 13 7 5 15 14 1 9
+put w 53 10515720223929181890
+note SIGMA[6] 12 5 1 15 14 13 4 10 0 7 6 3 9 2 8 11
+put w 54 13270197634454188380
+note SIGMA[7] 13 11 7 14 12 1 3 9 5 0 15 4 8 6 2 10
+put w 55 11702690517083809725
+note SIGMA[8] 6 15 14 9 11 3 0 8 12 2 13 7 1 4 10 5
+put w 56 6503616966983130870
+note SIGMA[9] 10 2 8 4 7 6 1 5 15 11 9 14 3 12 13 0
+put w 57 991893350865389610
+end
+
+note message word m[s[e]] of the current round, e = 0..15
+fn b2smw w edit ulong 64 e ulong to ulong
+s = and shr get w 59 mul e 4 15
+ret get w add 16 s
+end
+
+note RFC 7693 3.1 G on v[a] v[b] v[c] v[d] with x = m[s[2j]], y = m[s[2j+1]]; R1..R4 = 16 12 8 7
+fn b2sg w edit ulong 64 a ulong b ulong c ulong d ulong j ulong to void
+x = b2smw w mul j 2
+t = add get w a get w b
+put w a and add t x 4294967295
+t = xor get w d get w a
+put w d and or shr t 16 shl t 16 4294967295
+put w c and add get w c get w d 4294967295
+t = xor get w b get w c
+put w b and or shr t 12 shl t 20 4294967295
+x = b2smw w add mul j 2 1
+t = add get w a get w b
+put w a and add t x 4294967295
+t = xor get w d get w a
+put w d and or shr t 8 shl t 24 4294967295
+put w c and add get w c get w d 4294967295
+t = xor get w b get w c
+put w b and or shr t 7 shl t 25 4294967295
+end
+
+note one round i of RFC 7693 3.2 with s = SIGMA[i mod 10]
+fn b2sround w edit ulong 64 i ulong to void
+put w 59 get w add 48 rem i 10
+b2sg w 0 4 8 12 0
+b2sg w 1 5 9 13 1
+b2sg w 2 6 10 14 2
+b2sg w 3 7 11 15 3
+b2sg w 0 5 10 15 4
+b2sg w 1 6 11 12 5
+b2sg w 2 7 8 13 6
+b2sg w 3 4 9 14 7
+end
+
+note RFC 7693 3.2 F(h, m, t, f): m in w 16..31, t in w 58, last = 1 for the final block
+fn b2scomp w edit ulong 64 last ulong to void
+for i ulong 8
+put w i get w add 32 i
+put w add i 8 get w add 40 i
+end
+t = get w 58
+put w 12 xor get w 12 and t 4294967295
+put w 13 xor get w 13 shr t 32
+if eq last 1
+put w 14 xor get w 14 4294967295
+end
+for r ulong 10
+b2sround w r
+end
+for i ulong 8
+put w add 32 i xor get w add 32 i xor get w i get w add i 8
+end
+end
+
+note byte p of the padded stream d = key block (64 bytes, only when kn > 0) || m[0..n), 0 past its end
+fn b2sbyte m view uchar 65536 n ulong k view uchar 32 kn ulong p ulong to ulong
+q = p
+if gt kn 0
+if lt p 64
+if lt p kn
+ret ulong get k p
+end
+ret 0
+end
+q = sub p 64
+end
+if lt q n
+ret ulong get m q
+end
+ret 0
+end
+
+note load the 16 little-endian words of stream block d[b .. b+64) into m (w 16..31)
+fn b2sload w edit ulong 64 m view uchar 65536 n ulong k view uchar 32 kn ulong b ulong to void
+for i ulong 16
+o = add b mul i 4
+v = b2sbyte m n k kn add o 3
+v = or shl v 8 b2sbyte m n k kn add o 2
+v = or shl v 8 b2sbyte m n k kn add o 1
+v = or shl v 8 b2sbyte m n k kn o
+put w add 16 i v
+end
+end
+
+note h := IV, then RFC 7693 3.3 parameter block: h[0] ^= 0x01010000 ^ (kn << 8) ^ outn
+fn b2sstart w edit ulong 64 kn ulong outn ulong to void
+b2sinit w
+for i ulong 8
+put w add 32 i get w add 40 i
+end
+p = xor 16842752 xor shl kn 8 outn
+put w 32 xor get w 32 p
+end
+
+note h as little-endian bytes: o[0..outn) the digest, o[outn..32) zero
+fn b2sout w edit ulong 64 outn ulong o edit uchar 32 to void
+for i ulong 32
+put o i 0
+if lt i outn
+v = get w add 32 shr i 2
+put o i uchar and shr v mul and i 3 8 255
+end
+end
+end
+
+note RFC 7693 3.3 over the stream d (key block when kn > 0, then m): every 64-byte block but the last
+note is compressed with t = bytes so far, the last (zero-padded) block with t = the whole stream
+note length and the final flag; an empty stream (kn = 0, n = 0) is one zero block with t = 0.
+note At most 1026 blocks (64 + 65536 bytes); the block loop bound is 2000.
+fn b2shash m view uchar 65536 n ulong k view uchar 32 kn ulong outn ulong o edit uchar 32 to void
+if gt n 65536
+trap 3
+end
+if gt kn 32
+trap 3
+end
+if eq outn 0
+trap 3
+end
+if gt outn 32
+trap 3
+end
+w = new ulong 64 0
+b2sstart w kn outn
+tot = n
+if gt kn 0
+tot = add n 64
+end
+nb = ulong 1
+if gt tot 0
+nb = div add tot 63 64
+end
+b = ulong 0
+while lt add b 1 nb bound 2000
+b2sload w m n k kn mul b 64
+put w 58 mul add b 1 64
+b2scomp w 0
+b = add b 1
+end
+b2sload w m n k kn mul b 64
+put w 58 tot
+b2scomp w 1
+b2sout w outn o
+end
