@@ -1,0 +1,626 @@
+note SPDX-License-Identifier: Apache-2.0
+note cbor.om: the CBOR (RFC 8949) subset that Tailscale Tailnet Lock (tka, tag v1.102.0) uses.
+note Decoder: accepts and rejects exactly what github.com/fxamacker/cbor/v2 v2.9.0 Wellformed
+note accepts and rejects under tka's cborDecOpts (tka/tka.go 23-32): no tags, no indefinite
+note lengths, at most 16 nested arrays/maps, at most 4096 array elements, at most 1024 map pairs,
+note no bytes after the item. Like fxamacker it is lenient about form: non-shortest heads and
+note unsorted map keys are accepted (the encoder writes the canonical form). Floats and simple
+note values are kept as opaque tokens. Duplicate keys and text UTF-8 are typed checks in
+note fxamacker; cbrdupk and cbrutf8 are the helpers the model layer applies where Go does.
+note Encoder: CTAP2 canonical as cbor.CTAP2EncOptions (encode.go 647-656): shortest heads,
+note definite lengths, map keys sorted bytewise-lexically by their canonical encoding.
+note Library unit: functions only, no main, no globals. Every name starts with cbr.
+note Never traps on input bytes; traps only on caller contract violations (see README).
+note NOT constant-time-audited.
+note
+note Token table t (ulong 131074): token i at t[2i] (argument) and t[2i+1] (packed):
+note   bits 0..2 major type, bits 3..7 additional information (0..27),
+note   bits 8..24 offset of the head in the input, bits 32..48 index of the token after the subtree.
+note   t[131072] = token count, t[131073] = input length. Tokens are in input (pre-)order; the
+note   items of an array or map follow its token; a map's items alternate key, value.
+note Error codes of cbrdec (the class of the fxamacker error, in its check order, valid.go):
+note   1 empty input            2 truncated               3 reserved additional information
+note   4 indefinite length      5 break code outside one  6 tag
+note   7 simple value < 32 in two bytes                     8 more than 16 nested arrays/maps
+note   9 array over 4096        10 map over 1024 pairs    11 bytes after the item
+note   12 length or count >= 2^63
+
+note argument width in bytes for additional information a: 0 for a < 24, 1 2 4 8 for 24..27,
+note 9 for the reserved 28..30 and the indefinite 31
+fn cbrargw a ulong to ulong
+if lt a 24
+ret 0
+end
+if eq a 24
+ret 1
+end
+if eq a 25
+ret 2
+end
+if eq a 26
+ret 4
+end
+if eq a 27
+ret 8
+end
+ret 9
+end
+
+note big-endian unsigned value of d[p..p+w), w <= 8
+fn cbrbe d view uchar 65536 p ulong w ulong to ulong
+v = ulong 0
+for k ulong w
+v = or shl v 8 ulong get d add p k
+end
+ret v
+end
+
+note error for additional information 28..31 at depth dep (fxamacker valid.go 366-377, 110-114, 126-137)
+fn cbrbadai m ulong a ulong dep ulong to ulong
+if ne a 31
+ret 3
+end
+if eq m 7
+ret 5
+end
+if or eq m 2 eq m 3
+ret 4
+end
+if or eq m 4 eq m 5
+if ge dep 16
+ret 8
+end
+ret 4
+end
+ret 3
+end
+
+note checks after the head (valid.go 108-210): q = offset after the head, dep = open containers
+fn cbrargck n ulong q ulong m ulong v ulong dep ulong to ulong
+if eq m 6
+ret 6
+end
+if or eq m 2 eq m 3
+if gt v 9223372036854775807
+ret 12
+end
+if gt v sub n q
+ret 2
+end
+ret 0
+end
+if or eq m 4 eq m 5
+if ge dep 16
+ret 8
+end
+if gt v 9223372036854775807
+ret 12
+end
+if and eq m 4 gt v 4096
+ret 9
+end
+if and eq m 5 gt v 1024
+ret 10
+end
+end
+ret 0
+end
+
+note argument of a head with additional information a and argument width w at d[p]
+fn cbrhv d view uchar 65536 p ulong a ulong w ulong to ulong
+if eq w 0
+ret a
+end
+ret cbrbe d add p 1 w
+end
+
+fn cbrput t edit ulong 131074 i ulong v ulong x ulong to void
+put t mul i 2 v
+put t add mul i 2 1 x
+end
+
+note parse the head at d[p] into token i (dep containers open); 0 or an error code
+fn cbrhd d view uchar 65536 n ulong p ulong t edit ulong 131074 i ulong dep ulong to ulong
+if ge p n
+ret 2
+end
+m = ulong shr get d p 5
+a = ulong and get d p 31
+w = cbrargw a
+if gt w 8
+ret cbrbadai m a dep
+end
+if gt add add p 1 w n
+ret 2
+end
+v = cbrhv d p a w
+if and eq m 7 and eq a 24 lt v 32
+ret 7
+end
+cbrput t i v or or m shl a 3 shl p 8
+ret cbrargck n add add p 1 w m v dep
+end
+
+note accessors of token i
+fn cbrmaj t view ulong 131074 i ulong to ulong
+ret and get t add mul i 2 1 7
+end
+
+fn cbrai t view ulong 131074 i ulong to ulong
+ret and shr get t add mul i 2 1 3 31
+end
+
+fn cbrval t view ulong 131074 i ulong to ulong
+ret get t mul i 2
+end
+
+fn cbrhoff t view ulong 131074 i ulong to ulong
+ret and shr get t add mul i 2 1 8 131071
+end
+
+fn cbrnext t view ulong 131074 i ulong to ulong
+ret shr get t add mul i 2 1 32
+end
+
+fn cbrcount t view ulong 131074 to ulong
+ret get t 131072
+end
+
+fn cbrinlen t view ulong 131074 to ulong
+ret get t 131073
+end
+
+note offset of the payload of token i (the byte after its head)
+fn cbrpoff t view ulong 131074 i ulong to ulong
+ret add add cbrhoff t i 1 cbrargw cbrai t i
+end
+
+note input offset just after token i's own bytes (head, plus payload for byte and text strings)
+fn cbrtend t view ulong 131074 i ulong to ulong
+m = cbrmaj t i
+if or eq m 2 eq m 3
+ret add cbrpoff t i cbrval t i
+end
+ret cbrpoff t i
+end
+
+note number of items directly inside token i: array elements, or 2 per map pair
+fn cbritems t view ulong 131074 i ulong to ulong
+m = cbrmaj t i
+if eq m 4
+ret cbrval t i
+end
+if eq m 5
+ret mul cbrval t i 2
+end
+ret 0
+end
+
+note input bytes of the subtree of token i
+fn cbrspan t view ulong 131074 i ulong to ulong
+nx = cbrnext t i
+e = cbrinlen t
+if lt nx cbrcount t
+e = cbrhoff t nx
+end
+ret sub e cbrhoff t i
+end
+
+fn cbrsetn t edit ulong 131074 i ulong nx ulong to void
+k = add mul i 2 1
+put t k or get t k shl nx 32
+end
+
+note one item finished: count it off the open containers, closing every one that is now full;
+note returns the new stack depth
+fn cbrpop t edit ulong 131074 sk edit ulong 32 sr edit ulong 32 sp ulong nx ulong to ulong
+s = sp
+while gt s 0 bound 64
+k = sub s 1
+r = sub get sr k 1
+put sr k r
+if gt r 0
+ret s
+end
+cbrsetn t get sk k nx
+s = k
+end
+ret s
+end
+
+note decode d[0..n) into the token table t; 0 on success, else an error code (header notes).
+note n > 65536 is a caller error: trap 3.
+fn cbrdec d view uchar 65536 n ulong t edit ulong 131074 to ulong
+if gt n 65536
+trap 3
+end
+put t 131072 0
+put t 131073 n
+if eq n 0
+ret 1
+end
+sk = new ulong 32 0
+sr = new ulong 32 0
+sp = ulong 0
+i = ulong 0
+p = ulong 0
+while true bound 65537
+e = cbrhd d n p t i sp
+if ne e 0
+ret e
+end
+p = cbrtend t i
+c = cbritems t i
+if gt c 0
+put sk sp i
+put sr sp c
+sp = add sp 1
+else
+cbrsetn t i add i 1
+sp = cbrpop t sk sr sp add i 1
+end
+i = add i 1
+if eq sp 0
+break
+end
+end
+put t 131072 i
+if ne p n
+ret 11
+end
+ret 0
+end
+
+note value token of the first pair whose key is the unsigned integer key in map token m; 0 if none
+note (0 is never a value token). Keys of other types are skipped.
+fn cbrmfind t view ulong 131074 m ulong key ulong to ulong
+k = add m 1
+for j ulong cbrval t m
+v = cbrnext t k
+if and eq cbrmaj t k 0 eq cbrval t k key
+ret v
+end
+k = cbrnext t v
+end
+ret 0
+end
+
+note 1 when byte or text tokens a and b hold the same bytes
+fn cbrbeq d view uchar 65536 t view ulong 131074 a ulong b ulong to ulong
+if ne cbrval t a cbrval t b
+ret 0
+end
+pa = cbrpoff t a
+pb = cbrpoff t b
+for k ulong cbrval t a
+if ne get d add pa k get d add pb k
+ret 0
+end
+end
+ret 1
+end
+
+note integer key i as its int64 bit pattern (decode.go 2768-2784)
+fn cbrkiv t view ulong 131074 i ulong to ulong
+if eq cbrmaj t i 1
+ret not cbrval t i
+end
+ret cbrval t i
+end
+
+note a negative integer key below -2^63 (an error in Go, decode.go 2773-2782)
+fn cbrkbig t view ulong 131074 i ulong to bool
+ret and eq cbrmaj t i 1 gt cbrval t i 9223372036854775807
+end
+
+note 1 when map keys a and b are the same key under fxamacker's duplicate rule (decode.go 2765-2815):
+note integers compare as int64 (so 2^64-1 equals -1, as in Go); a negative integer below -2^63 is a
+note decode error in Go and never equal here; strings compare type and bytes; simple values and
+note floats compare head and argument; arrays and maps are never equal (Go rejects them as keys).
+fn cbrkeq d view uchar 65536 t view ulong 131074 a ulong b ulong to ulong
+ma = cbrmaj t a
+mb = cbrmaj t b
+if and le ma 1 le mb 1
+if or cbrkbig t a cbrkbig t b
+ret 0
+end
+if eq cbrkiv t a cbrkiv t b
+ret 1
+end
+ret 0
+end
+if ne ma mb
+ret 0
+end
+if or eq ma 2 eq ma 3
+ret cbrbeq d t a b
+end
+if and eq ma 7 and eq cbrval t a cbrval t b eq cbrai t a cbrai t b
+ret 1
+end
+ret 0
+end
+
+note 1 when map token m has two keys equal under cbrkeq, else 0
+fn cbrdupk d view uchar 65536 t view ulong 131074 m ulong to ulong
+np = cbrval t m
+k = add m 1
+for j ulong np
+l = cbrnext t cbrnext t k
+for x ulong sub sub np j 1
+if eq cbrkeq d t k l 1
+ret 1
+end
+l = cbrnext t cbrnext t l
+end
+k = cbrnext t cbrnext t k
+end
+ret 0
+end
+
+note second-byte range of a UTF-8 sequence led by b (Unicode 15 Table 3-7, as Go utf8.Valid)
+fn cbru8lo b ulong to ulong
+if eq b 224
+ret 160
+end
+if eq b 240
+ret 144
+end
+ret 128
+end
+
+fn cbru8hi b ulong to ulong
+if eq b 237
+ret 159
+end
+if eq b 244
+ret 143
+end
+ret 191
+end
+
+note sequence length for lead byte b >= 128: 2 3 4, or 0 when b cannot lead
+fn cbru8w b ulong to ulong
+if and ge b 194 le b 223
+ret 2
+end
+if and ge b 224 le b 239
+ret 3
+end
+if and ge b 240 le b 244
+ret 4
+end
+ret 0
+end
+
+note 1 when d[off..off+ln) is valid UTF-8 (Go utf8.Valid), else 0; off+ln > 65536 traps 3
+fn cbrutf8 d view uchar 65536 off ulong ln ulong to ulong
+i = ulong 0
+while lt i ln bound 65537
+b = ulong get d add off i
+if lt b 128
+i = add i 1
+continue
+end
+w = cbru8w b
+if or eq w 0 gt add i w ln
+ret 0
+end
+c = ulong get d add add off i 1
+if or lt c cbru8lo b gt c cbru8hi b
+ret 0
+end
+for k ulong sub w 2
+c = ulong get d add add off i add k 2
+if or lt c 128 gt c 191
+ret 0
+end
+end
+i = add i w
+end
+ret 1
+end
+
+note shortest argument width for v: 0 (v < 24), 1, 2, 4 or 8 bytes
+fn cbrhw v ulong to ulong
+if lt v 24
+ret 0
+end
+if le v 255
+ret 1
+end
+if le v 65535
+ret 2
+end
+if le v 4294967295
+ret 4
+end
+ret 8
+end
+
+note additional information for argument width w in 1 2 4 8
+fn cbrwai w ulong to ulong
+if eq w 1
+ret 24
+end
+if eq w 2
+ret 25
+end
+if eq w 4
+ret 26
+end
+ret 27
+end
+
+note v as w big-endian bytes at o[q..q+w); returns q + w
+fn cbrwbe o edit uchar 65536 q ulong v ulong w ulong to ulong
+for k ulong w
+put o add q k uchar and shr v mul sub sub w k 1 8 255
+end
+ret add q w
+end
+
+note write the shortest head for major m and argument v at o[q]; returns the offset after it.
+note Not for floats (cbrtok writes those). Traps 3 when the head does not fit in o.
+fn cbrhead o edit uchar 65536 q ulong m ulong v ulong to ulong
+w = cbrhw v
+if eq w 0
+put o q uchar or shl m 5 v
+ret add q 1
+end
+put o q uchar or shl m 5 cbrwai w
+ret cbrwbe o add q 1 v w
+end
+
+note copy d[p..p+n) to o[q..q+n); returns q + n
+fn cbrcopy d view uchar 65536 p ulong o edit uchar 65536 q ulong n ulong to ulong
+for k ulong n
+put o add q k get d add p k
+end
+ret add q n
+end
+
+note write token i of input d at o[q] in canonical form (strings with their payload); new offset.
+note Simple values are canonical already (fxamacker rejects simple < 32 in two bytes); floats keep
+note their width and bits.
+fn cbrtok d view uchar 65536 t view ulong 131074 i ulong o edit uchar 65536 q ulong to ulong
+m = cbrmaj t i
+v = cbrval t i
+a = cbrai t i
+if and eq m 7 ge a 25
+put o q uchar add 224 a
+ret cbrwbe o add q 1 v cbrargw a
+end
+r = cbrhead o q m v
+if or eq m 2 eq m 3
+ret cbrcopy d cbrpoff t i o r v
+end
+ret r
+end
+
+note bytes.Compare of o[a0..a1) and o[b0..b1) > 0
+fn cbrkgt o view uchar 65536 a0 ulong a1 ulong b0 ulong b1 ulong to bool
+la = sub a1 a0
+lb = sub b1 b0
+l = la
+if lt lb l
+l = lb
+end
+for k ulong l
+x = get o add a0 k
+y = get o add b0 k
+if ne x y
+ret gt x y
+end
+end
+ret gt la lb
+end
+
+note Pair workspace w (ulong 4096) for one map of np <= 1024 pairs, in output offsets:
+note   w[j] key start, w[1024+j] key end (value start), w[2048+j] pair end, w[3072+j] order.
+
+note key of pair b sorts after key of pair c
+fn cbrpgt o view uchar 65536 w view ulong 4096 b ulong c ulong to bool
+ret cbrkgt o get w b get w add 1024 b get w c get w add 1024 c
+end
+
+note stable insertion sort of the order w[3072..3072+np) by key bytes o[w[x]..w[1024+x])
+fn cbrisort o view uchar 65536 w edit ulong 4096 np ulong to void
+for j ulong np
+c = get w add 3072 j
+s = j
+while gt s 0 bound 1025
+b = get w add 3071 s
+if not cbrpgt o w b c
+break
+end
+put w add 3072 s b
+s = sub s 1
+end
+put w add 3072 s c
+end
+end
+
+note rewrite o[w[0]..) with the pairs in sorted order; returns the end offset, which must be
+note w[2048+np-1] (the caller traps 10 otherwise: an internal invariant, never seen in any run)
+fn cbrperm o edit uchar 65536 w view ulong 4096 np ulong sc edit uchar 65536 to ulong
+s = ulong 0
+for j ulong np
+b = get w add 3072 j
+p = get w b
+s = cbrcopy o p sc s sub get w add 2048 b p
+end
+ret cbrcopy sc 0 o get w 0 s
+end
+
+note store pair j of a map: key token k, value token v, next pair token l (output offsets oo[token])
+fn cbrpset w edit ulong 4096 oo view ulong 65537 j ulong k ulong v ulong l ulong to void
+put w j get oo k
+put w add 1024 j get oo v
+put w add 2048 j get oo l
+put w add 3072 j j
+end
+
+note fill w for map token m
+fn cbrpairs t view ulong 131074 m ulong oo view ulong 65537 w edit ulong 4096 to void
+k = add m 1
+for j ulong cbrval t m
+v = cbrnext t k
+l = cbrnext t v
+cbrpset w oo j k v l
+k = l
+end
+end
+
+note sort the encoded pairs of map token m in place (w and sc are scratch, reused for every map)
+fn cbrsortm o edit uchar 65536 t view ulong 131074 m ulong oo view ulong 65537 w edit ulong 4096 sc edit uchar 65536 to void
+np = cbrval t m
+cbrpairs t m oo w
+cbrisort o w np
+if ne cbrperm o w np sc get w add 2047 np
+trap 10
+end
+end
+
+note pass 2 of cbrencs: sort every map with 2 or more pairs among tokens r..nx-1, last first
+fn cbrsorts o edit uchar 65536 t view ulong 131074 r ulong nx ulong oo view ulong 65537 to void
+w = new ulong 4096 0
+sc = new uchar 65536 0
+i = nx
+while gt i r bound 65537
+i = sub i 1
+if and eq cbrmaj t i 5 gt cbrval t i 1
+cbrsortm o t i oo w sc
+end
+end
+end
+
+note encode the subtree of token r of input d (decoded into t by cbrdec) at o[off..), CTAP2
+note canonical; returns the offset after it. The output is never longer than the input subtree
+note (cbrspan); off + cbrspan t r > 65536 is a caller error: trap 9 before any write.
+note Pass 1 writes every token in canonical form and records its output offset oo[token]; pass 2
+note sorts the pairs of every map with 2 or more pairs, last token first, so a map's keys are
+note final before the map that holds them is sorted. Sorting permutes bytes inside one map's
+note range only, so the offset of every token that heads a pair of an enclosing map is unchanged.
+fn cbrencs d view uchar 65536 t view ulong 131074 r ulong o edit uchar 65536 off ulong to ulong
+if gt add off cbrspan t r 65536
+trap 9
+end
+nx = cbrnext t r
+oo = new ulong 65537 0
+q = off
+i = r
+while lt i nx bound 65537
+put oo i q
+q = cbrtok d t i o q
+i = add i 1
+end
+put oo nx q
+cbrsorts o t r nx oo
+ret q
+end
+
+note canonical encoding of the whole decoded item into o; returns its length
+fn cbrenc d view uchar 65536 t view ulong 131074 o edit uchar 65536 to ulong
+ret cbrencs d t 0 o 0
+end

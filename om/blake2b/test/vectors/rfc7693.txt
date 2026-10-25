@@ -1,0 +1,6 @@
+# RFC 7693 (https://www.rfc-editor.org/rfc/rfc7693.txt, fetched 2026-10-25). Copied values; the RFC's
+# Copyright Notice is in rfc7693.NOTICE (attribution; Independent Submission stream).
+# case OUTN KEY MSG DIGEST: Appendix A, BLAKE2b-512("abc")
+case 64 - 616263 ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923
+# selftest GRANDHASH: Appendix E, blake2b_res
+selftest c23a7800d98123bd10f506c61e29da5603d763b8bbad2e737f5e765a7bccd475

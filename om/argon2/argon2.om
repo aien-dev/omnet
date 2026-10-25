@@ -1,0 +1,317 @@
+note SPDX-License-Identifier: Apache-2.0
+note argon2.om: Argon2i version 0x13 (RFC 9106) building blocks in Omega, hashed with om/blake2b.
+note Library unit: functions only, no main, no globals. Every name starts with a2.
+note Concatenate after om/blake2b/blake2b.om. The memory matrix (up to 16 MiB) does not fit in an
+note Omega local array (at most 4 MiB per function, 8 MiB of stack per program) and a global cannot
+note be passed to a function (error 19), so the segment loop that reads and writes the matrix lives
+note in the program-mode companion argon2pool.om, which owns the matrix as a global. This file holds
+note everything that does not touch the matrix: parameter checks, H0, H', the first blocks, the
+note compression G, the Argon2i address blocks, the reference index and the tag.
+note
+note Parameters prm (view ulong 8): 0 t passes, 1 m KiB, 2 p lanes, 3 T tag bytes,
+note   4 |P|, 5 |S|, 6 |K|, 7 |X|; inp (view uchar 65536) holds P || S || K || X back to back.
+note State st (ulong 16): 0 t, 1 m' blocks, 2 p, 3 q = m'/p, 4 segment length q/4,
+note   5 pass r, 6 slice s, 7 lane l, 8 T, 9 m, 10 type y = 1 (Argon2i).
+note Accepted ranges (else a2setup returns 1): 1 <= t <= 999999, 1 <= p, 8p <= m <= 16384,
+note   4 <= T <= 1024. |P|, |S|, |K|, |X| each <= 65536 with |P|+|S|+|K|+|X| <= 65496 is the caller's
+note   contract (the H0 input must fit one 65536-byte BLAKE2b message); breaking it traps 3.
+note Blocks are ulong 128 arrays, word i = little-endian bytes 8i..8i+7 of the 1024-byte block.
+note NOT constant-time-audited: Omega gives no timing guarantee and none was measured. Argon2i's
+note memory access pattern is independent of the password by design (RFC 9106 3.4.1.2).
+
+note b[at .. at+4) = LE32(v)
+fn a2le32 b edit uchar 65536 at ulong v ulong to void
+for i ulong 4
+put b add at i uchar and shr v mul i 8 255
+end
+end
+
+note o[at .. at+n) = v[0 .. n)
+fn a2cp v view uchar 64 o edit uchar 1024 at ulong n ulong to void
+for i ulong n
+put o add at i get v i
+end
+end
+
+note b[0 .. 64) = v[0 .. 64)
+fn a2cp64 v view uchar 64 b edit uchar 65536 to void
+for i ulong 64
+put b i get v i
+end
+end
+
+note RFC 9106 3.3 H'^T(x[0..xn)): T <= 64 is H^T(LE32(T) || x); else r = ceil(T/32) - 2,
+note V1 = H^64(LE32(T) || x), Vi = H^64(V(i-1)) for i = 2..r, V(r+1) = H^(T-32r)(Vr), and the
+note output is the first 32 bytes of V1..Vr followed by V(r+1). Caller: 1 <= T <= 1024, xn <= 65532.
+fn a2hp tl ulong x view uchar 65536 xn ulong out edit uchar 1024 to void
+b = new uchar 65536 0
+k = new uchar 64 0
+v = new uchar 64 0
+a2le32 b 0 tl
+for i ulong xn
+put b add 4 i get x i
+end
+if le tl 64
+b2bhash b add xn 4 k 0 tl v
+a2cp v out 0 tl
+else
+r = sub div add tl 31 32 2
+b2bhash b add xn 4 k 0 64 v
+a2cp v out 0 32
+at = ulong 32
+for j ulong sub r 1
+a2cp64 v b
+b2bhash b 64 k 0 64 v
+a2cp v out at 32
+at = add at 32
+end
+a2cp64 v b
+last = sub tl mul 32 r
+b2bhash b 64 k 0 last v
+a2cp v out at last
+end
+end
+
+note checks prm against the accepted ranges and fills st; 0 = accepted, 1 = parameter out of range
+fn a2setup prm view ulong 8 st edit ulong 16 to ulong
+for i ulong 4
+if gt get prm add 4 i 65536
+trap 3
+end
+end
+s = add add get prm 4 get prm 5 add get prm 6 get prm 7
+if gt s 65496
+trap 3
+end
+t = get prm 0
+m = get prm 1
+p = get prm 2
+tl = get prm 3
+if or lt t 1 gt t 999999
+ret 1
+end
+if or lt p 1 gt p 2048
+ret 1
+end
+if or lt m mul 8 p gt m 16384
+ret 1
+end
+if or lt tl 4 gt tl 1024
+ret 1
+end
+mp = mul mul 4 p div m mul 4 p
+put st 0 t
+put st 1 mp
+put st 2 p
+put st 3 div mp p
+put st 4 div mp mul 4 p
+put st 8 tl
+put st 9 m
+put st 10 1
+ret 0
+end
+
+note RFC 9106 3.2 step 1: h = H^64(LE32(p) || LE32(T) || LE32(m) || LE32(t) || LE32(0x13) ||
+note LE32(y) || LE32(|P|) || P || LE32(|S|) || S || LE32(|K|) || K || LE32(|X|) || X)
+fn a2h0 prm view ulong 8 inp view uchar 65536 h edit uchar 64 to void
+b = new uchar 65536 0
+a2le32 b 0 get prm 2
+a2le32 b 4 get prm 3
+a2le32 b 8 get prm 1
+a2le32 b 12 get prm 0
+a2le32 b 16 19
+a2le32 b 20 1
+at = ulong 24
+src = ulong 0
+for f ulong 4
+fl = get prm add 4 f
+a2le32 b at fl
+at = add at 4
+for i ulong fl
+put b add at i get inp add src i
+end
+at = add at fl
+src = add src fl
+end
+k = new uchar 64 0
+b2bhash b at k 0 64 h
+end
+
+note blk = the 128 little-endian words of o
+fn a2b2w o view uchar 1024 blk edit ulong 128 to void
+for i ulong 128
+v = ulong 0
+for j ulong 8
+v = or shl v 8 ulong get o add mul i 8 sub 7 j
+end
+put blk i v
+end
+end
+
+note RFC 9106 3.2 steps 3-4: blk = B[l][j] = H'^1024(H0 || LE32(j) || LE32(l)), j = 0 or 1
+fn a2first h0 view uchar 64 j ulong l ulong blk edit ulong 128 to void
+x = new uchar 65536 0
+for i ulong 64
+put x i get h0 i
+end
+a2le32 x 64 j
+a2le32 x 68 l
+o = new uchar 1024 0
+a2hp 1024 x 72 o
+a2b2w o blk
+end
+
+note RFC 9106 3.6 GB with the BlaMka multiply: x + y + 2 * lo32(x) * lo32(y), all modulo 2^64
+fn a2fm x ulong y ulong to ulong
+ret add add x y shl mul and x 4294967295 and y 4294967295 1
+end
+
+note RFC 9106 3.6 GB(a, b, c, d) on r[a] r[b] r[c] r[d]; rotations right by 32, 24, 16, 63
+fn a2gb r edit ulong 128 a ulong b ulong c ulong d ulong to void
+put r a a2fm get r a get r b
+t = xor get r d get r a
+put r d or shr t 32 shl t 32
+put r c a2fm get r c get r d
+t = xor get r b get r c
+put r b or shr t 24 shl t 40
+put r a a2fm get r a get r b
+t = xor get r d get r a
+put r d or shr t 16 shl t 48
+put r c a2fm get r c get r d
+t = xor get r b get r c
+put r b or shr t 63 shl t 1
+end
+
+note word index of input k = 0..15 of P on row i (md 0: words 16i..16i+15) or on column i
+note (md 1: the 16-byte registers R(i), R(i+8), .., R(i+56), i.e. words 2i + 16(k/2) + k%2)
+fn a2ix md ulong i ulong k ulong to ulong
+if eq md 0
+ret add mul i 16 k
+end
+ret add add mul i 2 mul shr k 1 16 and k 1
+end
+
+note RFC 9106 3.6 P on the 16 words selected by a2ix md i
+fn a2p r edit ulong 128 md ulong i ulong to void
+x = new ulong 16 0
+for k ulong 16
+put x k a2ix md i k
+end
+a2gb r get x 0 get x 4 get x 8 get x 12
+a2gb r get x 1 get x 5 get x 9 get x 13
+a2gb r get x 2 get x 6 get x 10 get x 14
+a2gb r get x 3 get x 7 get x 11 get x 15
+a2gb r get x 0 get x 5 get x 10 get x 15
+a2gb r get x 1 get x 6 get x 11 get x 12
+a2gb r get x 2 get x 7 get x 8 get x 13
+a2gb r get x 3 get x 4 get x 9 get x 14
+end
+
+note RFC 9106 3.5 G(X, Y): R = X ^ Y, Q = P on each row of R, Z = P on each column of Q,
+note G = Z ^ R. out = G(x, y) when xr = 0; out = out ^ G(x, y) when xr = 1 (3.2 step 6, v 0x13)
+fn a2comp x view ulong 128 y view ulong 128 out edit ulong 128 xr ulong to void
+r = new ulong 128 0
+z = new ulong 128 0
+for i ulong 128
+v = xor get x i get y i
+put r i v
+put z i v
+end
+for i ulong 8
+a2p z 0 i
+end
+for i ulong 8
+a2p z 1 i
+end
+for i ulong 128
+w = xor get z i get r i
+if eq xr 1
+w = xor w get out i
+end
+put out i w
+end
+end
+
+note RFC 9106 3.4.1.2 input block Z of segment (r, l, s): LE64 r, l, s, m', t, y, counter 0, zeros
+fn a2zin st view ulong 16 z edit ulong 128 to void
+for i ulong 128
+put z i 0
+end
+put z 0 get st 5
+put z 1 get st 7
+put z 2 get st 6
+put z 3 get st 1
+put z 4 get st 0
+put z 5 get st 10
+end
+
+note next address block: counter z[6] += 1, adr = G(0, G(0, Z))
+fn a2addr z edit ulong 128 adr edit ulong 128 to void
+put z 6 add get z 6 1
+zr = new ulong 128 0
+t = new ulong 128 0
+a2comp zr z t 0
+a2comp zr t adr 0
+end
+
+note RFC 9106 3.4.1.1: reference lane from J2 = rnd >> 32; in pass 0 slice 0 the current lane
+fn a2rlane st view ulong 16 rnd ulong to ulong
+if and eq get st 5 0 eq get st 6 0
+ret get st 7
+end
+ret rem shr rnd 32 get st 2
+end
+
+note RFC 9106 3.4.2: size of the reference area for index i of the current segment with reference
+note lane rl: every finished block that may be read, minus the previous block; the same lane also
+note takes the blocks of this segment before i
+fn a2area st view ulong 16 rl ulong i ulong to ulong
+s = get st 6
+sl = get st 4
+same = eq rl get st 7
+area = mul 3 sl
+if same
+area = add area i
+end
+if eq get st 5 0
+area = mul s sl
+if or eq s 0 same
+area = add area i
+end
+end
+if or eq i 0 same
+area = sub area 1
+end
+ret area
+end
+
+note RFC 9106 3.4.2: absolute block number (lane * q + column) referenced by index i of the current
+note segment, from the 64-bit pseudo-random value rnd (J1 = low 32 bits, J2 = high 32 bits): the area
+note starts after the current segment in later passes, at column 0 in pass 0
+fn a2ref st view ulong 16 rnd ulong i ulong to ulong
+rl = a2rlane st rnd
+area = a2area st rl i
+from = mul rem add get st 6 1 4 get st 4
+if eq get st 5 0
+from = 0
+end
+x = and rnd 4294967295
+x = shr mul x x 32
+x = shr mul area x 32
+q = get st 3
+c = rem sub add from area add x 1 q
+ret add mul rl q c
+end
+
+note RFC 9106 3.2 step 8: out[0 .. T) = H'^T(c as 1024 little-endian bytes)
+fn a2tag c view ulong 128 tl ulong out edit uchar 1024 to void
+b = new uchar 65536 0
+for i ulong 128
+v = get c i
+for j ulong 8
+y = uchar and shr v mul j 8 255
+put b add mul i 8 j y
+end
+end
+a2hp tl b 1024 out
+end

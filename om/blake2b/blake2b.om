@@ -1,0 +1,202 @@
+note SPDX-License-Identifier: Apache-2.0
+note blake2b.om: BLAKE2b (RFC 7693) in Omega, keyed or unkeyed, digest length 1..64 bytes.
+note Library unit: functions only, no main, no globals. Every name starts with b2b.
+note
+note b2bhash m n k kn outn o
+note   m     view uchar 65536   message bytes; only m[0..n) are read
+note   n     ulong              message length, 0..65536
+note   k     view uchar 64      key bytes; only k[0..kn) are read
+note   kn    ulong              key length, 0..64 (0 = unkeyed)
+note   outn  ulong              digest length, 1..64
+note   o     edit uchar 64      o[0..outn) receives the digest, o[outn..64) is set to 0
+note A length outside its range traps 3 (program exit 103) before any output is written.
+note
+note 64-bit words live in ulong cells; ulong add wraps modulo 2^64, which is the RFC's addition.
+note Working words w (one array: a library unit has no globals):
+note   0..15 v (RFC 7693 3.2), 16..31 m, 32..39 h, 40..47 IV (2.6),
+note   48..57 SIGMA rows (2.7) packed as sixteen 4-bit indexes, entry i in bits 4i..4i+3,
+note   58 byte counter t (low 64 bits; the high 64 bits are always 0 here), 59 SIGMA row of the round.
+note NOT constant-time-audited: Omega gives no timing guarantee and none was measured.
+
+note RFC 7693 2.6: IV[i] = SHA-512 IV, 6A09E667F3BCC908 BB67AE8584CAA73B 3C6EF372FE94F82B
+note A54FF53A5F1D36F1 510E527FADE682D1 9B05688C2B3E6C1F 1F83D9ABFB41BD6B 5BE0CD19137E2179
+fn b2binit w edit ulong 64 to void
+put w 40 7640891576956012808
+put w 41 13503953896175478587
+put w 42 4354685564936845355
+put w 43 11912009170470909681
+put w 44 5840696475078001361
+put w 45 11170449401992604703
+put w 46 2270897969802886507
+put w 47 6620516959819538809
+note SIGMA[0] 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+put w 48 18364758544493064720
+note SIGMA[1] 14 10 4 8 9 15 13 6 1 12 0 2 11 7 5 3
+put w 49 3853709921291437230
+note SIGMA[2] 11 8 12 0 5 2 15 13 10 14 3 6 7 1 9 4
+put w 50 5266788149650328715
+note SIGMA[3] 7 9 3 1 13 12 11 14 2 6 5 10 4 0 15 8
+put w 51 10305543691612001175
+note SIGMA[4] 9 0 5 7 2 4 10 15 14 1 11 12 6 8 3 13
+put w 52 15242093322790139145
+note SIGMA[5] 2 12 6 10 0 11 8 3 4 13 7 5 15 14 1 9
+put w 53 10515720223929181890
+note SIGMA[6] 12 5 1 15 14 13 4 10 0 7 6 3 9 2 8 11
+put w 54 13270197634454188380
+note SIGMA[7] 13 11 7 14 12 1 3 9 5 0 15 4 8 6 2 10
+put w 55 11702690517083809725
+note SIGMA[8] 6 15 14 9 11 3 0 8 12 2 13 7 1 4 10 5
+put w 56 6503616966983130870
+note SIGMA[9] 10 2 8 4 7 6 1 5 15 11 9 14 3 12 13 0
+put w 57 991893350865389610
+end
+
+note message word m[s[e]] of the current round, e = 0..15
+fn b2bmw w edit ulong 64 e ulong to ulong
+s = and shr get w 59 mul e 4 15
+ret get w add 16 s
+end
+
+note RFC 7693 3.1 G on v[a] v[b] v[c] v[d] with x = m[s[2j]], y = m[s[2j+1]]; R1..R4 = 32 24 16 63
+fn b2bg w edit ulong 64 a ulong b ulong c ulong d ulong j ulong to void
+x = b2bmw w mul j 2
+put w a add add get w a get w b x
+t = xor get w d get w a
+put w d or shr t 32 shl t 32
+put w c add get w c get w d
+t = xor get w b get w c
+put w b or shr t 24 shl t 40
+x = b2bmw w add mul j 2 1
+put w a add add get w a get w b x
+t = xor get w d get w a
+put w d or shr t 16 shl t 48
+put w c add get w c get w d
+t = xor get w b get w c
+put w b or shr t 63 shl t 1
+end
+
+note one round i of RFC 7693 3.2 with s = SIGMA[i mod 10]
+fn b2bround w edit ulong 64 i ulong to void
+put w 59 get w add 48 rem i 10
+b2bg w 0 4 8 12 0
+b2bg w 1 5 9 13 1
+b2bg w 2 6 10 14 2
+b2bg w 3 7 11 15 3
+b2bg w 0 5 10 15 4
+b2bg w 1 6 11 12 5
+b2bg w 2 7 8 13 6
+b2bg w 3 4 9 14 7
+end
+
+note RFC 7693 3.2 F(h, m, t, f): m in w 16..31, t in w 58, last = 1 for the final block; 12 rounds
+fn b2bcomp w edit ulong 64 last ulong to void
+for i ulong 8
+put w i get w add 32 i
+put w add i 8 get w add 40 i
+end
+put w 12 xor get w 12 get w 58
+if eq last 1
+put w 14 xor get w 14 18446744073709551615
+end
+for r ulong 12
+b2bround w r
+end
+for i ulong 8
+put w add 32 i xor get w add 32 i xor get w i get w add i 8
+end
+end
+
+note byte p of the padded stream d = key block (128 bytes, only when kn > 0) || m[0..n), 0 past its end
+fn b2bbyte m view uchar 65536 n ulong k view uchar 64 kn ulong p ulong to ulong
+q = p
+if gt kn 0
+if lt p 128
+if lt p kn
+ret ulong get k p
+end
+ret 0
+end
+q = sub p 128
+end
+if lt q n
+ret ulong get m q
+end
+ret 0
+end
+
+note little-endian word of stream bytes d[p .. p+8)
+fn b2bword m view uchar 65536 n ulong k view uchar 64 kn ulong p ulong to ulong
+v = ulong 0
+for j ulong 8
+v = or shl v 8 b2bbyte m n k kn sub add p 7 j
+end
+ret v
+end
+
+note load the 16 little-endian words of stream block d[b .. b+128) into m (w 16..31)
+fn b2bload w edit ulong 64 m view uchar 65536 n ulong k view uchar 64 kn ulong b ulong to void
+for i ulong 16
+put w add 16 i b2bword m n k kn add b mul i 8
+end
+end
+
+note h := IV, then RFC 7693 3.3 parameter block: h[0] ^= 0x01010000 ^ (kn << 8) ^ outn
+fn b2bstart w edit ulong 64 kn ulong outn ulong to void
+b2binit w
+for i ulong 8
+put w add 32 i get w add 40 i
+end
+p = xor 16842752 xor shl kn 8 outn
+put w 32 xor get w 32 p
+end
+
+note h as little-endian bytes: o[0..outn) the digest, o[outn..64) zero
+fn b2bout w edit ulong 64 outn ulong o edit uchar 64 to void
+for i ulong 64
+put o i 0
+if lt i outn
+v = get w add 32 shr i 3
+put o i uchar and shr v mul and i 7 8 255
+end
+end
+end
+
+note RFC 7693 3.3 over the stream d (key block when kn > 0, then m): every 128-byte block but the
+note last is compressed with t = bytes so far, the last (zero-padded) block with t = the whole stream
+note length and the final flag; an empty stream (kn = 0, n = 0) is one zero block with t = 0.
+note At most 513 blocks (128 + 65536 bytes); the block loop bound is 1000.
+fn b2bhash m view uchar 65536 n ulong k view uchar 64 kn ulong outn ulong o edit uchar 64 to void
+if gt n 65536
+trap 3
+end
+if gt kn 64
+trap 3
+end
+if eq outn 0
+trap 3
+end
+if gt outn 64
+trap 3
+end
+w = new ulong 64 0
+b2bstart w kn outn
+tot = n
+if gt kn 0
+tot = add n 128
+end
+nb = ulong 1
+if gt tot 0
+nb = div add tot 127 128
+end
+b = ulong 0
+while lt add b 1 nb bound 1000
+b2bload w m n k kn mul b 128
+put w 58 mul add b 1 128
+b2bcomp w 0
+b = add b 1
+end
+b2bload w m n k kn mul b 128
+put w 58 tot
+b2bcomp w 1
+b2bout w outn o
+end

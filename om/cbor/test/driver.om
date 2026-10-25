@@ -1,0 +1,215 @@
+note SPDX-License-Identifier: Apache-2.0
+note driver.om: program-mode test driver for om/cbor/cbor.om. Concatenated after
+note om/blake2s/blake2s.om and om/cbor/cbor.om.
+note
+note driver   reads one case per line from stdin: the input bytes as hex (either case, even digit
+note          count, at most 65536 bytes) or "-" for the empty input. For each case it writes one line:
+note            e<code>                                 cbrdec rejected the input with that code
+note            ok NTOK DUP UTF8 K1 CANON HASH          cbrdec accepted it:
+note          NTOK  token count (cbrcount)
+note          DUP   1 when the root is a map with duplicate keys (cbrdupk), else 0
+note          UTF8  1 when every text string is valid UTF-8 (cbrutf8), else 0
+note          K1    major:argument of the value at unsigned key 1 of a root map (cbrmfind), or -
+note          CANON cbrenc output as lowercase hex, or - when empty (never: an item is >= 1 byte)
+note          HASH  BLAKE2s-256 of CANON (b2shash), lowercase hex
+note          Exit 0 at end of input, 2 on a malformed line.
+
+global ib uchar 65536
+global ist ulong 2
+
+note next input byte, -1 at end of input
+fn getc to int
+if eq get ist 0 get ist 1
+r = read 0 ib 0 65536
+if le r 0
+ret -1
+end
+put ist 0 0
+put ist 1 ulong r
+end
+p = get ist 0
+put ist 0 add p 1
+ret int get ib p
+end
+
+fn hexv c int to int
+if and ge c 48 le c 57
+ret sub c 48
+end
+if and ge c 97 le c 102
+ret sub c 87
+end
+if and ge c 65 le c 70
+ret sub c 55
+end
+ret -1
+end
+
+fn hexd v ulong to uchar
+if lt v 10
+ret uchar add v 48
+end
+ret uchar add v 87
+end
+
+note one line of hex into a: the byte count; -2 at end of input before any byte; -1 when malformed
+fn rdline a edit uchar 65536 to long
+c = getc
+if eq c -1
+ret -2
+end
+if eq c 45
+if eq getc 10
+ret 0
+end
+ret -1
+end
+t = ulong 0
+while ne c 10 bound 999999
+if ge t 65536
+ret -1
+end
+hi = hexv c
+lo = hexv getc
+if or lt hi 0 lt lo 0
+ret -1
+end
+put a t uchar add mul hi 16 lo
+t = add t 1
+c = getc
+end
+ret long t
+end
+
+note write a[0..n) as hex into h at offset at; returns the new offset
+fn hexout h edit uchar 131200 at ulong a view uchar 65536 n ulong to ulong
+for i ulong n
+v = ulong get a i
+put h add at mul i 2 hexd shr v 4
+put h add at add mul i 2 1 hexd and v 15
+end
+ret add at mul n 2
+end
+
+fn hex32 h edit uchar 131200 at ulong a view uchar 32 to ulong
+for i ulong 32
+v = ulong get a i
+put h add at mul i 2 hexd shr v 4
+put h add at add mul i 2 1 hexd and v 15
+end
+ret add at 64
+end
+
+note decimal v into h at offset at; returns the new offset
+fn decout h edit uchar 131200 at ulong v ulong to ulong
+g = new uchar 24 0
+n = ulong 0
+x = v
+while true bound 24
+put g n uchar add rem x 10 48
+n = add n 1
+x = div x 10
+if eq x 0
+break
+end
+end
+for i ulong n
+put h add at i get g sub sub n i 1
+end
+ret add at n
+end
+
+fn putw h edit uchar 131200 at ulong c ulong to ulong
+put h at uchar c
+ret add at 1
+end
+
+note 1 when every text token of the table is valid UTF-8
+fn allutf8 d view uchar 65536 t view ulong 131074 to ulong
+for i ulong cbrcount t
+if eq cbrmaj t i 3
+if eq cbrutf8 d cbrpoff t i cbrval t i 0
+ret 0
+end
+end
+end
+ret 1
+end
+
+fn rootdup d view uchar 65536 t view ulong 131074 to ulong
+if eq cbrmaj t 0 5
+ret cbrdupk d t 0
+end
+ret 0
+end
+
+note K1 field: major:argument of the value at key 1 of a root map, or -
+fn k1out h edit uchar 131200 at ulong t view ulong 131074 to ulong
+if ne cbrmaj t 0 5
+ret putw h at 45
+end
+v = cbrmfind t 0 1
+if eq v 0
+ret putw h at 45
+end
+q = decout h at cbrmaj t v
+q = putw h q 58
+ret decout h q cbrval t v
+end
+
+note the ok line after a successful decode of d into t
+fn okline h edit uchar 131200 d view uchar 65536 t view ulong 131074 o edit uchar 65536 to ulong
+md = new uchar 32 0
+k = new uchar 32 0
+n = cbrenc d t o
+q = putw h 0 111
+q = putw h q 107
+q = putw h q 32
+q = decout h q cbrcount t
+q = putw h q 32
+q = decout h q rootdup d t
+q = putw h q 32
+q = decout h q allutf8 d t
+q = putw h q 32
+q = k1out h q t
+q = putw h q 32
+q = hexout h q o n
+q = putw h q 32
+b2shash o n k 0 32 md
+q = hex32 h q md
+ret putw h q 10
+end
+
+fn cases to int
+d = new uchar 65536 0
+t = new ulong 131074 0
+o = new uchar 65536 0
+h = new uchar 131200 0
+while true bound 999999
+n = rdline d
+if eq n -2
+ret 0
+end
+if lt n 0
+ret 2
+end
+e = cbrdec d ulong n t
+q = ulong 0
+if eq e 0
+q = okline h d t o
+else
+q = putw h 0 101
+q = decout h q e
+q = putw h q 10
+end
+w = write 1 h 0 q
+if ne w long q
+trap 1
+end
+end
+ret 2
+end
+
+fn main to int
+ret cases
+end

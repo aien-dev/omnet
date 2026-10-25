@@ -1,0 +1,203 @@
+note SPDX-License-Identifier: Apache-2.0
+note driver.om: program-mode test driver for om/argon2 (concatenated after om/blake2b/blake2b.om,
+note om/argon2/argon2.om and om/argon2/argon2pool.om).
+note
+note Reads one case per line from stdin and writes one line per case on stdout:
+note   T M P TL PW SALT KEY AD\n   Argon2i (a2hash): decimal t, m KiB, p, tag length, then hex
+note                               password, salt, secret K and associated data X ("-" = empty);
+note                               output: 2*TL lowercase hex digits, or "e1" when a2hash returns 1
+note   tka SEC\n                   TKA disablement value (a2tka) of the hex secret SEC ("-" = empty)
+note                               output: 64 lowercase hex digits
+note Decimals have at most 7 digits; a hex field is at most 65536 bytes (SEC at most 1024) and all
+note four together must fit the 65496-byte input. Exit 0 at end of input, 2 on a malformed line.
+
+global ib uchar 65536
+global ist ulong 2
+
+note next input byte, -1 at end of input
+fn getc to int
+if eq get ist 0 get ist 1
+r = read 0 ib 0 65536
+if le r 0
+ret -1
+end
+put ist 0 0
+put ist 1 ulong r
+end
+p = get ist 0
+put ist 0 add p 1
+ret int get ib p
+end
+
+fn hexv c int to int
+if and ge c 48 le c 57
+ret sub c 48
+end
+if and ge c 97 le c 102
+ret sub c 87
+end
+if and ge c 65 le c 70
+ret sub c 55
+end
+ret -1
+end
+
+fn hexd v ulong to uchar
+if lt v 10
+ret uchar add v 48
+end
+ret uchar add v 87
+end
+
+note a hex field into a[at ..) of at most cap bytes, ended by the byte sep; its length, or -1
+fn rdhex a edit uchar 65536 at ulong cap ulong sep int to long
+c = getc
+if eq c 45
+if eq getc sep
+ret 0
+end
+ret -1
+end
+t = ulong 0
+while ne c sep bound 999999
+if ge t cap
+ret -1
+end
+hi = hexv c
+lo = hexv getc
+if or lt hi 0 lt lo 0
+ret -1
+end
+put a add at t uchar add mul hi 16 lo
+t = add t 1
+c = getc
+end
+if eq t 0
+ret -1
+end
+ret long t
+end
+
+note decimal ended by a space, first byte c already read; -1 when malformed
+fn rddec c int to long
+t = long 0
+k = ulong 0
+d = c
+while ne d 32 bound 16
+if or lt d 48 gt d 57
+ret -1
+end
+if ge k 7
+ret -1
+end
+t = add mul t 10 long sub d 48
+k = add k 1
+d = getc
+end
+if eq k 0
+ret -1
+end
+ret t
+end
+
+note o[0..n) as lowercase hex and a newline
+fn emit o view uchar 1024 n ulong to void
+h = new uchar 2049 0
+for i ulong n
+v = ulong get o i
+put h mul i 2 hexd shr v 4
+put h add mul i 2 1 hexd and v 15
+end
+put h mul n 2 10
+r = write 1 h 0 add mul n 2 1
+if ne r long add mul n 2 1
+trap 1
+end
+end
+
+note "tka SEC" after the t: 0 done, 2 malformed
+fn tkaline to int
+if ne getc 107
+ret 2
+end
+if ne getc 97
+ret 2
+end
+if ne getc 32
+ret 2
+end
+b = new uchar 65536 0
+n = rdhex b 0 1024 10
+if lt n 0
+ret 2
+end
+s = new uchar 1024 0
+for i ulong ulong n
+put s i get b i
+end
+o = new uchar 32 0
+a2tka s ulong n o
+e = new uchar 1024 0
+for i ulong 32
+put e i get o i
+end
+emit e 32
+ret 0
+end
+
+note "T M P TL PW SALT KEY AD" with the first byte c read: 0 done, 2 malformed
+fn hashline c int to int
+prm = new ulong 8 0
+v = rddec c
+for i ulong 4
+if lt v 0
+ret 2
+end
+put prm i ulong v
+if lt i 3
+v = rddec getc
+end
+end
+inp = new uchar 65536 0
+at = ulong 0
+for f ulong 4
+sep = int 32
+if eq f 3
+sep = 10
+end
+n = rdhex inp at sub 65496 at sep
+if lt n 0
+ret 2
+end
+put prm add 4 f ulong n
+at = add at ulong n
+end
+out = new uchar 1024 0
+e = a2hash prm inp out
+if ne e 0
+put out 0 uchar add e 224
+emit out 1
+ret 0
+end
+emit out get prm 3
+ret 0
+end
+
+fn main to int
+while true bound 999999
+c = getc
+if eq c -1
+ret 0
+end
+r = int 0
+if eq c 116
+r = tkaline
+else
+r = hashline c
+end
+if ne r 0
+ret r
+end
+end
+ret 2
+end

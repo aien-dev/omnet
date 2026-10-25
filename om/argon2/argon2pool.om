@@ -1,0 +1,196 @@
+note SPDX-License-Identifier: Apache-2.0
+note argon2pool.om: program-mode companion of argon2.om. It owns the Argon2 memory matrix and runs
+note the segment loop over it. Concatenate after om/blake2b/blake2b.om and om/argon2/argon2.om.
+note Every name starts with a2.
+note
+note Why a global: the matrix for the TKA parameters is 16384 blocks of 1024 bytes (16 MiB). An
+note Omega local array is limited to 4 MiB per function (error 23) inside an 8 MiB stack, and a
+note global cannot be passed as an argument (error 19). The one place 16 MiB can live is a program
+note global, and only functions that name it can reach it. This file is that one place; the
+note algorithm pieces stay in the pure library argon2.om. A program includes this file once.
+note
+note a2hash prm inp out -> ulong
+note   prm  view ulong 8       t, m KiB, p, T, |P|, |S|, |K|, |X| (ranges: argon2.om header)
+note   inp  view uchar 65536   P || S || K || X
+note   out  edit uchar 1024    out[0..T) receives the tag, out[T..1024) is set to 0
+note   returns 0, or 1 when a parameter is out of range (out is then left unchanged)
+note a2tka sec sn o
+note   sec  view uchar 1024    disablement secret; only sec[0..sn) is read
+note   sn   ulong              secret length, 0..1024; more traps 3 (caller contract)
+note   o    edit uchar 32      receives the Tailnet Lock disablement value: Argon2i with
+note                           S = "tailscale network-lock disablement salt", t = 4,
+note                           m = 16384 KiB, p = 4, T = 32 (golang.org/x/crypto/argon2.Key)
+note The matrix is shared by every call; calls run one after another (Omega has no threads).
+note NOT constant-time-audited: Omega gives no timing guarantee and none was measured.
+
+note 2097152 words = 16384 blocks of 128 words = 16 MiB, the largest m accepted by a2setup
+global a2mem ulong 2097152
+text a2tsalt "tailscale network-lock disablement salt"
+
+note blk = matrix block b
+fn a2get blk edit ulong 128 b ulong to void
+o = mul b 128
+for i ulong 128
+put blk i get a2mem add o i
+end
+end
+
+note matrix block b = blk
+fn a2put blk view ulong 128 b ulong to void
+o = mul b 128
+for i ulong 128
+put a2mem add o i get blk i
+end
+end
+
+note first index of the current segment: 2 in pass 0 slice 0 (B[l][0], B[l][1] are already set)
+fn a2i0 st view ulong 16 to ulong
+if and eq get st 5 0 eq get st 6 0
+ret 2
+end
+ret 0
+end
+
+note absolute block number of index i of the current segment: l * q + s * (q/4) + i
+fn a2abs st view ulong 16 i ulong to ulong
+b = add mul get st 7 get st 3 mul get st 6 get st 4
+ret add b i
+end
+
+note block before index i0 of the current segment: the lane's last block when it is column 0
+fn a2prev st view ulong 16 i0 ulong to ulong
+b = a2abs st i0
+if and eq i0 0 eq get st 6 0
+b = add b get st 3
+end
+ret sub b 1
+end
+
+note matrix block cur (index i of the segment, pv = the block before it) from the pseudo-random
+note value rnd: pass 0 writes G(prev, ref), later passes write B ^ G(prev, ref) (version 0x13);
+note pv then holds the new block, the previous block of index i + 1
+fn a2blk st view ulong 16 pv edit ulong 128 rnd ulong i ulong cur ulong to void
+rf = new ulong 128 0
+cu = new ulong 128 0
+a2get rf a2ref st rnd i
+xr = ulong 0
+if gt get st 5 0
+xr = 1
+a2get cu cur
+end
+a2comp pv rf cu xr
+a2put cu cur
+for j ulong 128
+put pv j get cu j
+end
+end
+
+note RFC 9106 3.2 steps 5-6 for one segment (pass st5, slice st6, lane st7) with Argon2i addressing
+note (3.4.1.2): a new address block before the first index and at every multiple of 128
+fn a2seg st view ulong 16 to void
+z = new ulong 128 0
+adr = new ulong 128 0
+pv = new ulong 128 0
+a2zin st z
+i0 = a2i0 st
+sl = get st 4
+cur = a2abs st i0
+a2get pv a2prev st i0
+i = i0
+while lt i sl bound 999999
+if or eq i i0 eq rem i 128 0
+a2addr z adr
+end
+a2blk st pv get adr rem i 128 i cur
+cur = add cur 1
+i = add i 1
+end
+end
+
+note RFC 9106 3.2 steps 1-4: H0, then B[l][0] and B[l][1] of every lane
+fn a2init st view ulong 16 prm view ulong 8 inp view uchar 65536 to void
+h0 = new uchar 64 0
+a2h0 prm inp h0
+blk = new ulong 128 0
+q = get st 3
+for l ulong get st 2
+a2first h0 0 l blk
+a2put blk mul l q
+a2first h0 1 l blk
+a2put blk add mul l q 1
+end
+end
+
+note RFC 9106 3.2 steps 5-6: t passes of 4 slices over p lanes; the lanes of one slice never read
+note each other's segment, so running them in order gives the parallel result
+fn a2fill st edit ulong 16 to void
+r = ulong 0
+while lt r get st 0 bound 999999
+put st 5 r
+for s ulong 4
+put st 6 s
+for l ulong get st 2
+put st 7 l
+a2seg st
+end
+end
+r = add r 1
+end
+end
+
+note RFC 9106 3.2 steps 7-8: C = XOR of the last block of every lane, out = H'^T(C)
+fn a2fin st view ulong 16 out edit uchar 1024 to void
+q = get st 3
+c = new ulong 128 0
+blk = new ulong 128 0
+a2get c sub q 1
+for l ulong sub get st 2 1
+a2get blk sub mul add l 2 q 1
+for i ulong 128
+put c i xor get c i get blk i
+end
+end
+for i ulong 1024
+put out i 0
+end
+a2tag c get st 8 out
+end
+
+fn a2hash prm view ulong 8 inp view uchar 65536 out edit uchar 1024 to ulong
+st = new ulong 16 0
+e = a2setup prm st
+if ne e 0
+ret e
+end
+a2init st prm inp
+a2fill st
+a2fin st out
+ret 0
+end
+
+fn a2tka sec view uchar 1024 sn ulong o edit uchar 32 to void
+if gt sn 1024
+trap 3
+end
+prm = new ulong 8 0
+put prm 0 4
+put prm 1 16384
+put prm 2 4
+put prm 3 32
+put prm 4 sn
+put prm 5 39
+inp = new uchar 65536 0
+for i ulong sn
+put inp i get sec i
+end
+for i ulong 39
+put inp add sn i get a2tsalt i
+end
+t = new uchar 1024 0
+if ne a2hash prm inp t 0
+trap 1
+end
+for i ulong 32
+put o i get t i
+end
+end

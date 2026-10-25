@@ -1,0 +1,15 @@
+# Parameter sets outside the accepted ranges (om/argon2/argon2.om header): a2hash must return 1
+# (driver prints e1) without trapping. Ranges come from RFC 9106 3.1 (t >= 1, p >= 1, m >= 8p,
+# T >= 4) and this unit's limits (t <= 999999, m <= 16384 KiB, T <= 1024). Hand-written.
+# case T M P TL PW SALT KEY AD EXPECT
+case 0 32 4 32 01 02 - - e1
+case 1000000 32 4 32 01 02 - - e1
+case 1 32 0 32 01 02 - - e1
+case 1 31 4 32 01 02 - - e1
+case 1 7 1 32 - - - - e1
+case 1 16385 1 32 01 02 - - e1
+case 1 9999999 4 32 01 02 - - e1
+case 1 16384 2049 32 01 02 - - e1
+case 1 32 4 3 01 02 - - e1
+case 1 32 4 0 01 02 - - e1
+case 1 32 4 1025 01 02 - - e1

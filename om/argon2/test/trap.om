@@ -1,0 +1,33 @@
+note SPDX-License-Identifier: Apache-2.0
+note trap.om: concatenated after blake2b.om, argon2.om and argon2pool.om. Each case breaks one caller
+note contract by one, so the program must exit 103 (trap 3) and never reach ret 0:
+note   trap 1   a2tka with sn = 1025 (secret capacity 1024)
+note   trap 2   a2hash with |P| = 65537 (one field over 65536)
+note   trap 3   a2hash with |P| + |S| + |K| + |X| = 65497 (H0 input capacity 65496)
+fn main to int
+a = new uchar 16 0
+l = argread 1 a 0 16
+if ne l 1
+ret 2
+end
+c = get a 0
+s = new uchar 1024 0
+o = new uchar 32 0
+if eq c 49
+a2tka s 1025 o
+end
+prm = new ulong 8 0
+put prm 0 1
+put prm 1 8
+put prm 2 1
+put prm 3 32
+put prm 4 65537
+if eq c 51
+put prm 4 65481
+put prm 5 16
+end
+inp = new uchar 65536 0
+out = new uchar 1024 0
+e = a2hash prm inp out
+ret int e
+end

@@ -1,0 +1,494 @@
+note SPDX-License-Identifier: Apache-2.0
+note codec.om: the text encodings of the Tailnet Lock JSON wire format, matching Go go1.26.0
+note encoding/base64, encoding/base32 and encoding/hex and tailscale.com v1.102.0 byte for byte.
+note Library unit: functions only, no main, no globals. Every name starts with cd.
+note
+note Byte strings are fixed-capacity arrays (view/edit uchar 65536) plus an explicit length.
+note Decoders read untrusted text: a malformed input returns cdbad (65537) or 0, never traps.
+note A length beyond the stated capacity is a caller contract violation: trap 3 before any write.
+note
+note fn cdb64enc s view uchar 65536 n ulong o edit uchar 65536 to ulong
+note   base64.StdEncoding.Encode (RFC 4648 4, padded) of s[0..n), n 0..49152; returns the length.
+note fn cdb64dec s view uchar 65536 n ulong o edit uchar 65536 to ulong
+note   base64.StdEncoding.Decode of s[0..n), n 0..65536, the decoder encoding/json uses for []byte.
+note   Returns the byte count (o[0..count) holds the bytes) or cdbad.
+note fn cdb32enc s view uchar 65536 n ulong o edit uchar 65536 to ulong
+note   base32.StdEncoding.WithPadding(NoPadding) encode (RFC 4648 6, no padding), n 0..40960.
+note fn cdb32dec s view uchar 65536 n ulong o edit uchar 65536 to ulong
+note   base32.StdEncoding.WithPadding(NoPadding).DecodeString of s[0..n), n 0..65536.
+note fn cdhexenc s view uchar 65536 n ulong o edit uchar 65536 to ulong
+note   hex.Encode (lowercase, RFC 4648 8), n 0..32768.
+note fn cdhexdec s view uchar 65536 n ulong o edit uchar 65536 to ulong
+note   hex.DecodeString of s[0..n), n 0..65536; returns n/2 or cdbad.
+note fn cdaumenc h view uchar 32 o edit uchar 65536 to ulong
+note   tka.AUMHash.MarshalText: 52 base32 characters; returns 52.
+note fn cdaumdec s view uchar 65536 n ulong h edit uchar 32 to ulong
+note   tka.AUMHash.UnmarshalText into a zero AUMHash: 1 accepted, 0 rejected (h all zero).
+note fn cdnkenc k view uchar 32 o edit uchar 65536 to ulong
+note   key.NodePublic.MarshalText: "nodekey:" and 64 lowercase hex digits; returns 72.
+note fn cdnkdec s view uchar 65536 n ulong k edit uchar 32 to ulong
+note   key.NodePublic.UnmarshalText: 1 accepted, 0 rejected (k all zero).
+note
+note On cdbad the output bytes written so far are not cleared; callers discard o.
+note NOT constant-time-audited: Omega gives no timing guarantee and none was measured.
+
+const cdbad ulong 65537
+note "nodekey:" (types/key/node.go nodePublicHexPrefix) as 8 big-endian bytes 6e 6f 64 65 6b 65 79 3a
+const cdnkpfx ulong 7957689453343242554
+
+note base64 value of one character (RFC 4648 table 1), 255 when outside the alphabet
+fn cdb64v c ulong to ulong
+if and ge c 65 le c 90
+ret sub c 65
+end
+if and ge c 97 le c 122
+ret sub c 71
+end
+if and ge c 48 le c 57
+ret add c 4
+end
+if eq c 43
+ret 62
+end
+if eq c 47
+ret 63
+end
+ret 255
+end
+
+note base64 character of a value 0..63 (RFC 4648 table 1)
+fn cdb64c v ulong to uchar
+if lt v 26
+ret uchar add v 65
+end
+if lt v 52
+ret uchar add v 71
+end
+if lt v 62
+ret uchar sub v 4
+end
+if eq v 62
+ret 43
+end
+ret 47
+end
+
+note base32 value of one character (RFC 4648 table 3), 255 outside A-Z 2-7 (lowercase too)
+fn cdb32v c ulong to ulong
+if and ge c 65 le c 90
+ret sub c 65
+end
+if and ge c 50 le c 55
+ret sub c 24
+end
+ret 255
+end
+
+note base32 character of a value 0..31 (RFC 4648 table 3)
+fn cdb32c v ulong to uchar
+if lt v 26
+ret uchar add v 65
+end
+ret uchar add v 24
+end
+
+note hex digit value, either case (hex.go reverseHexTable), 255 otherwise
+fn cdhexv c ulong to ulong
+if and ge c 48 le c 57
+ret sub c 48
+end
+if and ge c 97 le c 102
+ret sub c 87
+end
+if and ge c 65 le c 70
+ret sub c 55
+end
+ret 255
+end
+
+note lowercase hex digit of a value 0..15 (hex.go hextable "0123456789abcdef")
+fn cdhexc v ulong to uchar
+if lt v 10
+ret uchar add v 48
+end
+ret uchar add v 87
+end
+
+note the byte of the two hex digits at s[i], s[i+1], or 256 when either is not a hex digit
+fn cdhexb s view uchar 65536 i ulong to ulong
+a = cdhexv ulong get s i
+b = cdhexv ulong get s add i 1
+if or gt a 15 gt b 15
+ret 256
+end
+ret or shl a 4 b
+end
+
+fn cdzero32 k edit uchar 32 to void
+for i ulong 32
+put k i 0
+end
+end
+
+note m bytes of s from i (m 1..w) as a big-endian w-byte number, missing bytes 0
+fn cdgetbe s view uchar 65536 i ulong m ulong w ulong to ulong
+x = ulong 0
+for t ulong w
+x = shl x 8
+if lt t m
+x = or x ulong get s add i t
+end
+end
+ret x
+end
+
+note the first m bytes of the w-byte big-endian number x at o[q..q+m)
+fn cdputbe o edit uchar 65536 q ulong x ulong m ulong w ulong to void
+for t ulong m
+sh = mul sub sub w 1 t 8
+v = and shr x sh 255
+put o add q t uchar v
+end
+end
+
+note four base64 characters at o[p..p+4) of the 24-bit group x: m sextets, then pad '='
+fn cdb64put o edit uchar 65536 p ulong x ulong m ulong to void
+for t ulong 4
+if lt t m
+put o add p t cdb64c and shr x sub 18 mul t 6 63
+else
+put o add p t 61
+end
+end
+end
+
+note RFC 4648 4: 3 bytes -> 4 characters; a final 1 or 2 bytes -> 2 or 3 characters and "==" or "="
+fn cdb64enc s view uchar 65536 n ulong o edit uchar 65536 to ulong
+if gt n 49152
+trap 3
+end
+f = div n 3
+for k ulong f
+cdb64put o mul k 4 cdgetbe s mul k 3 3 3 4
+end
+r = sub n mul f 3
+p = mul f 4
+if eq r 0
+ret p
+end
+cdb64put o p cdgetbe s mul f 3 r 3 add r 1
+ret add p 4
+end
+
+note base64.StdEncoding.Decode (base64.go 312-407, 518-584). CR and LF are skipped everywhere
+note (base64.go 340, 356-359, 372-375), so the rest must be whole quanta of 4; only the last may end in
+note "xx==" or "xxx=", and after the padding only CR/LF may follow. Non-zero trailing bits are
+note accepted (no Strict, base64.go 394, 401). pd: 0 no '=', 1 one '=' after 2 symbols, 2 done.
+fn cdb64dec s view uchar 65536 n ulong o edit uchar 65536 to ulong
+if gt n 65536
+trap 3
+end
+acc = ulong 0
+j = ulong 0
+q = ulong 0
+pd = ulong 0
+for i ulong n
+c = ulong get s i
+if or eq c 10 eq c 13
+continue
+end
+if eq pd 2
+ret cdbad
+end
+if eq pd 1
+if ne c 61
+ret cdbad
+end
+pd = 2
+continue
+end
+if eq c 61
+if eq j 2
+pd = 1
+continue
+end
+if eq j 3
+pd = 2
+continue
+end
+ret cdbad
+end
+v = cdb64v c
+if gt v 63
+ret cdbad
+end
+acc = or shl acc 6 v
+j = add j 1
+if eq j 4
+cdputbe o q acc 3 3
+q = add q 3
+acc = 0
+j = 0
+end
+end
+if eq pd 1
+ret cdbad
+end
+if eq pd 0
+if ne j 0
+ret cdbad
+end
+ret q
+end
+note pd 2: j is 2 or 3; the j symbols, left-aligned in 24 bits, give j - 1 bytes
+cdputbe o q shl acc mul sub 4 j 6 sub j 1 3
+ret add q sub j 1
+end
+
+note m base32 characters at o[p..) of the 40-bit group x
+fn cdb32put o edit uchar 65536 p ulong x ulong m ulong to void
+for t ulong m
+put o add p t cdb32c and shr x sub 35 mul t 5 31
+end
+end
+
+note RFC 4648 6 without padding (base32.go 121-187, EncodedLen 284-289): 5 bytes -> 8 characters,
+note a final 1, 2, 3 or 4 bytes -> 2, 4, 5 or 7 characters
+fn cdb32enc s view uchar 65536 n ulong o edit uchar 65536 to ulong
+if gt n 40960
+trap 3
+end
+f = div n 5
+for k ulong f
+cdb32put o mul k 8 cdgetbe s mul k 5 5 5 8
+end
+r = sub n mul f 5
+p = mul f 8
+if eq r 0
+ret p
+end
+c = div add mul r 8 4 5
+cdb32put o p cdgetbe s mul f 5 r 5 c
+ret add p c
+end
+
+note base32.go stripNewlines 545-555: copy s[0..n) without CR and LF into t, return the count
+fn cdstrip s view uchar 65536 n ulong t edit uchar 65536 to ulong
+l = ulong 0
+for i ulong n
+c = get s i
+if and ne c 10 ne c 13
+put t l c
+l = add l 1
+end
+end
+ret l
+end
+
+note base32.go 330-349, the padding branch, entered when the byte just read (t[p-1]) is the pad
+note byte, j >= 2 symbols are held and fewer than 8 bytes remain. With NoPadding the pad byte is
+note byte(rune(-1)) = 255. Returns 1 when Go accepts the padding, 0 when it reports an error.
+note Bytes past the 7 - j checked ones are not looked at, as in Go.
+fn cdb32pad t view uchar 65536 p ulong l ulong j ulong to ulong
+rm = sub l p
+if lt add rm j 7
+ret 0
+end
+for k ulong sub 7 j
+if gt rm k
+if ne get t add p k 255
+ret 0
+end
+end
+end
+if or eq j 3 eq j 6
+ret 0
+end
+ret 1
+end
+
+note output bytes of a quantum of dl symbols (base32.go 362-382): 8 7 5 4 2 -> 5 4 3 2 1;
+note 1, 3 and 6 symbols at the end of the input give no byte and no error
+fn cdb32nb dl ulong to ulong
+if eq dl 8
+ret 5
+end
+if eq dl 7
+ret 4
+end
+if eq dl 5
+ret 3
+end
+if eq dl 4
+ret 2
+end
+if eq dl 2
+ret 1
+end
+ret 0
+end
+
+note write the bytes of the quantum d[0..dl) at o[q..); returns the count
+fn cdb32out d view ulong 8 dl ulong o edit uchar 65536 q ulong to ulong
+x = ulong 0
+for i ulong 8
+x = or shl x 5 get d i
+end
+nb = cdb32nb dl
+cdputbe o q x nb 5
+ret nb
+end
+
+note one quantum of base32.go decode (305-358) from t[p..l), p < l, into d[0..dl). Returns
+note p' * 16 + dl, with p' the next read position, or 0 when Go reports an error. Go ends the
+note input (end = true) exactly when dl < 8: at the end of t, or in the padding branch.
+fn cdb32q t view uchar 65536 p ulong l ulong d edit ulong 8 to ulong
+for i ulong 8
+put d i 0
+end
+j = ulong 0
+while lt j 8 bound 9
+if eq p l
+ret add mul p 16 j
+end
+c = ulong get t p
+p = add p 1
+if and eq c 255 and ge j 2 lt sub l p 8
+if eq cdb32pad t p l j 0
+ret 0
+end
+ret add mul p 16 j
+end
+v = cdb32v c
+if gt v 31
+ret 0
+end
+put d j v
+j = add j 1
+end
+ret add mul p 16 8
+end
+
+note base32.go decode 305-386 on the newline-free t[0..l) with padChar = NoPadding
+fn cdb32raw t view uchar 65536 l ulong o edit uchar 65536 to ulong
+d = new ulong 8 0
+p = ulong 0
+q = ulong 0
+while lt p l bound 999999
+r = cdb32q t p l d
+if eq r 0
+ret cdbad
+end
+p = shr r 4
+dl = and r 15
+q = add q cdb32out d dl o q
+if lt dl 8
+ret q
+end
+end
+ret q
+end
+
+note base32.go DecodeString 421-426: strip CR and LF, then decode
+fn cdb32dec s view uchar 65536 n ulong o edit uchar 65536 to ulong
+if gt n 65536
+trap 3
+end
+t = new uchar 65536 0
+l = cdstrip s n t
+ret cdb32raw t l o
+end
+
+note hex.go Encode 45-53, lowercase
+fn cdhexenc s view uchar 65536 n ulong o edit uchar 65536 to ulong
+if gt n 32768
+trap 3
+end
+for i ulong n
+v = ulong get s i
+put o mul i 2 cdhexc shr v 4
+put o add mul i 2 1 cdhexc and v 15
+end
+ret mul n 2
+end
+
+note hex.go DecodeString 138-142 and Decode 87-113: odd length or a non-hex byte is an error
+fn cdhexdec s view uchar 65536 n ulong o edit uchar 65536 to ulong
+if gt n 65536
+trap 3
+end
+if ne and n 1 0
+ret cdbad
+end
+for i ulong div n 2
+v = cdhexb s mul i 2
+if gt v 255
+ret cdbad
+end
+put o i uchar v
+end
+ret div n 2
+end
+
+note tka/aum.go AppendText 44-46: base32StdNoPad of the 32 hash bytes
+fn cdaumenc h view uchar 32 o edit uchar 65536 to ulong
+t = new uchar 65536 0
+for i ulong 32
+put t i get h i
+end
+ret cdb32enc t 32 o
+end
+
+note tka/aum.go UnmarshalText 33-41: DecodedLen(len) must be 32, which holds for len 52 only
+note (52/8*5 + 52%8*5/8 = 32; 51 gives 31, 53 gives 33), counted before CR/LF are stripped.
+note Then Decode into the 32 bytes. Stripping leaves at most 52 symbols, at most 32 bytes.
+fn cdaumdec s view uchar 65536 n ulong h edit uchar 32 to ulong
+cdzero32 h
+if ne n 52
+ret 0
+end
+o = new uchar 65536 0
+r = cdb32dec s n o
+if eq r cdbad
+ret 0
+end
+for i ulong r
+put h i get o i
+end
+ret 1
+end
+
+note types/key/node.go AppendText 324-326 and util.go appendHexKey 56-61
+fn cdnkenc k view uchar 32 o edit uchar 65536 to ulong
+for i ulong 8
+put o i uchar and shr cdnkpfx sub 56 mul i 8 255
+end
+for i ulong 32
+v = ulong get k i
+put o add 8 mul i 2 cdhexc shr v 4
+put o add 9 mul i 2 cdhexc and v 15
+end
+ret 72
+end
+
+note types/key/node.go UnmarshalText 336-338 and util.go parseHex 70-87: exact prefix "nodekey:",
+note then exactly 64 hex digits of either case (fromHexChar 90-101)
+fn cdnkdec s view uchar 65536 n ulong k edit uchar 32 to ulong
+cdzero32 k
+if ne n 72
+ret 0
+end
+x = cdgetbe s 0 8 8
+if ne x cdnkpfx
+ret 0
+end
+for i ulong 32
+v = cdhexb s add 8 mul i 2
+if gt v 255
+cdzero32 k
+ret 0
+end
+put k i uchar v
+end
+ret 1
+end

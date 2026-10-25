@@ -1,0 +1,257 @@
+note SPDX-License-Identifier: Apache-2.0
+note driver.om: test driver for om/codec (program mode), concatenated after codec.om.
+note Reads cases on stdin, one per line: OP ARG
+note   OP  b64e b64d b32e b32d hexe hexd aume aumd nkye nkyd
+note   ARG the input bytes as hex (either case, even digit count), or - for empty. For a decoder
+note       these are the bytes of the text to decode, so CR, LF, 255 and any other byte can appear.
+note Writes one line per case:
+note   encoders  "ok TEXT" (the encoded characters, - when empty)
+note   decoders  "ok HEX" (decoded bytes as lowercase hex, - when empty) or "err"
+note aume and nkye take exactly 32 bytes. Exit 0 at end of input, 65 on a malformed line.
+note With one argument N (1..6) the driver instead calls one coder with a length one past its
+note capacity, which must trap 3 (exit 103): 1 b64e 49153, 2 b64d 65537, 3 b32e 40961,
+note 4 b32d 65537, 5 hexe 32769, 6 hexd 65537.
+
+text tbad "driver: bad input\n"
+text tok "ok "
+text terr "err\n"
+text tdash "-"
+text tnl "\n"
+
+global dvin uchar 16777216
+global dvlen ulong 1
+global dvbuf uchar 131080
+global dvarg uchar 8
+
+fn dvdie to void
+r = write 2 tbad 0 len tbad
+exit 65
+end
+
+fn dvnib c ulong to ulong
+if and ge c 48 le c 57
+ret sub c 48
+end
+if and ge c 97 le c 102
+ret sub c 87
+end
+if and ge c 65 le c 70
+ret sub c 55
+end
+dvdie
+ret 0
+end
+
+note hex digits dvin[o..e) into a; returns the byte count
+fn dvhex a edit uchar 65536 o ulong e ulong to ulong
+h = sub e o
+if and eq h 1 eq get dvin o 45
+ret 0
+end
+if or ne and h 1 0 gt h 131072
+dvdie
+end
+c = div h 2
+for i ulong c
+hi = dvnib ulong get dvin add o mul i 2
+lo = dvnib ulong get dvin add o add mul i 2 1
+put a i uchar or shl hi 4 lo
+end
+ret c
+end
+
+note "ok " then o[0..n) as text (hx 0) or as lowercase hex (hx 1), "-" when n is 0
+fn dvok o view uchar 65536 n ulong hx ulong to void
+r = write 1 tok 0 len tok
+if eq n 0
+r = write 1 tdash 0 1
+r = write 1 tnl 0 1
+ret
+end
+m = n
+if eq hx 1
+m = mul n 2
+for i ulong n
+v = ulong get o i
+put dvbuf mul i 2 cdhexc shr v 4
+put dvbuf add mul i 2 1 cdhexc and v 15
+end
+else
+for i ulong n
+put dvbuf i get o i
+end
+end
+put dvbuf m 10
+r = write 1 dvbuf 0 add m 1
+end
+
+note a decoder result r over o: cdbad -> err, else ok HEX
+fn dvdec o view uchar 65536 r ulong to void
+if eq r cdbad
+w = write 1 terr 0 len terr
+ret
+end
+dvok o r 1
+end
+
+note a fixed 32-byte decoder result: 1 -> ok HEX of k, 0 -> err (k must then be all zero)
+fn dvfix k view uchar 32 r ulong o edit uchar 65536 to void
+if eq r 0
+for i ulong 32
+if ne get k i 0
+dvdie
+end
+end
+w = write 1 terr 0 len terr
+ret
+end
+for i ulong 32
+put o i get k i
+end
+dvok o 32 1
+end
+
+fn dvk32 a view uchar 65536 n ulong k edit uchar 32 to void
+if ne n 32
+dvdie
+end
+for i ulong 32
+put k i get a i
+end
+end
+
+note run one case: op code x, input a[0..n)
+fn dvcase x ulong a view uchar 65536 n ulong o edit uchar 65536 k edit uchar 32 to void
+note b64e b64d b32e b32d hexe hexd as 4 big-endian bytes
+if eq x 1647719525
+dvok o cdb64enc a n o 0
+ret
+end
+if eq x 1647719524
+dvdec o cdb64dec a n o
+ret
+end
+if eq x 1647522405
+dvok o cdb32enc a n o 0
+ret
+end
+if eq x 1647522404
+dvdec o cdb32dec a n o
+ret
+end
+if eq x 1751480421
+dvok o cdhexenc a n o 0
+ret
+end
+if eq x 1751480420
+dvdec o cdhexdec a n o
+ret
+end
+dvcase2 x a n o k
+end
+
+note aume aumd nkye nkyd as 4 big-endian bytes
+fn dvcase2 x ulong a view uchar 65536 n ulong o edit uchar 65536 k edit uchar 32 to void
+if eq x 1635085669
+dvk32 a n k
+dvok o cdaumenc k o 0
+ret
+end
+if eq x 1635085668
+r = cdaumdec a n k
+dvfix k r o
+ret
+end
+if eq x 1852537189
+dvk32 a n k
+dvok o cdnkenc k o 0
+ret
+end
+if eq x 1852537188
+r = cdnkdec a n k
+dvfix k r o
+ret
+end
+dvdie
+end
+
+fn dvslurp to void
+t = ulong 0
+while true bound 999999
+room = sub len dvin t
+if eq room 0
+dvdie
+end
+r = read 0 dvin t room
+if lt r 0
+dvdie
+end
+if eq r 0
+break
+end
+t = add t ulong r
+end
+put dvlen 0 t
+end
+
+note over-capacity calls; each must trap 3 before it returns
+fn dvtrap a view uchar 65536 o edit uchar 65536 to void
+l = argread 1 dvarg 0 8
+if ne l 1
+dvdie
+end
+c = get dvarg 0
+r = ulong 0
+if eq c 49
+r = cdb64enc a 49153 o
+end
+if eq c 50
+r = cdb64dec a 65537 o
+end
+if eq c 51
+r = cdb32enc a 40961 o
+end
+if eq c 52
+r = cdb32dec a 65537 o
+end
+if eq c 53
+r = cdhexenc a 32769 o
+end
+if eq c 54
+r = cdhexdec a 65537 o
+end
+dvdie
+end
+
+fn main to int
+a = new uchar 65536 0
+o = new uchar 65536 0
+k = new uchar 32 0
+if ge argcnt 2
+dvtrap a o
+ret 1
+end
+dvslurp
+tot = get dvlen 0
+p = ulong 0
+while lt p tot bound 999999
+e = p
+while ne get dvin e 10 bound 999999
+e = add e 1
+end
+if lt sub e p 6
+dvdie
+end
+if ne get dvin add p 4 32
+dvdie
+end
+x = ulong 0
+for i ulong 4
+x = or shl x 8 ulong get dvin add p i
+end
+n = dvhex a add p 5 e
+dvcase x a n o k
+p = add e 1
+end
+ret 0
+end

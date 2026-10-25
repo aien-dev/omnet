@@ -1,0 +1,26 @@
+# RFC 4648 section 10 test vectors, the BASE64, BASE32 and BASE16 lines copied verbatim.
+# Source: https://www.rfc-editor.org/rfc/rfc4648.txt, fetched 2026-10-25,
+# sha256 84e14418f795d503be5f34bf23ce4ebaa119e9ec7c9f667d8caeb111385b178f (lines 652-713).
+# Copyright (C) The Internet Society (2006); section 10 is under the RFC section 15 copying
+# conditions (Copyright (c) 2000-2006 Simon Josefsson). Notices: rfc4648.NOTICE.
+BASE64("") = ""
+BASE64("f") = "Zg=="
+BASE64("fo") = "Zm8="
+BASE64("foo") = "Zm9v"
+BASE64("foob") = "Zm9vYg=="
+BASE64("fooba") = "Zm9vYmE="
+BASE64("foobar") = "Zm9vYmFy"
+BASE32("") = ""
+BASE32("f") = "MY======"
+BASE32("fo") = "MZXQ===="
+BASE32("foo") = "MZXW6==="
+BASE32("foob") = "MZXW6YQ="
+BASE32("fooba") = "MZXW6YTB"
+BASE32("foobar") = "MZXW6YTBOI======"
+BASE16("") = ""
+BASE16("f") = "66"
+BASE16("fo") = "666F"
+BASE16("foo") = "666F6F"
+BASE16("foob") = "666F6F62"
+BASE16("fooba") = "666F6F6261"
+BASE16("foobar") = "666F6F626172"

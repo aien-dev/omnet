@@ -1,0 +1,6 @@
+# RFC 9106 (https://www.rfc-editor.org/rfc/rfc9106.txt, fetched 2026-10-25), section 5.2,
+# Argon2i version 0x13: memory 32 KiB, passes 3, 4 lanes, tag 32 bytes, password 32 x 01,
+# salt 16 x 02, secret 8 x 03, associated data 12 x 04.
+# Copied values; the RFC's Copyright Notice is in rfc9106.NOTICE (attribution; IRTF stream).
+# case T M P TL PW SALT KEY AD TAG
+case 3 32 4 32 0101010101010101010101010101010101010101010101010101010101010101 02020202020202020202020202020202 0303030303030303 040404040404040404040404 c814d9d1dc7f37aa13f0d77f2494bda1c8de6b016dd388d29952a4c4672b6ce8
