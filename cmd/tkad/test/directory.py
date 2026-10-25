@@ -75,6 +75,9 @@ class Daemon:
     def revision(self):
         return self.rpc(11, node=0, admin=True)["Revision"]
 
+    def storeid(self):
+        return self.rpc(11, node=0, admin=True)["StoreID"]
+
 
 def files(directory):
     return sorted(p.name for p in pathlib.Path(directory).iterdir())
@@ -118,13 +121,13 @@ with tempfile.TemporaryDirectory(prefix="tkad-replaced-") as top:
         check(refused(live) == 73, "resume in the replacement directory refused")
         check(files(live) == [], "refused resume wrote nothing into the replacement")
 
-        # Observed, not endorsed: the store carries no identity word, so the same
-        # path can host an unrelated store with its own Revision 0 while the
-        # opened one is still live. Nothing here tells a reconnecting client that
-        # the path it follows now names a different store; see the R5 frame.
+        # The same path can host an unrelated store while the opened one is still
+        # live. Its identity is what tells a reconnecting client that the path it
+        # follows now names a different store.
         other = Daemon(live, initialize=True)
         try:
             check(other.revision() == 0, "replacement path accepted an independent empty store")
+            check(other.storeid() != daemon.storeid(), "replacement store is distinguishable by identity")
         finally:
             other.stop()
     finally:

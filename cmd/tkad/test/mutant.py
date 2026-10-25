@@ -27,3 +27,16 @@ for label, replacement in variants.items():
     else:
         assert run.returncode != 0 and not completed_mismatch and "truncated daemon reply" in run.stderr, (run.returncode, run.stdout, run.stderr)
         print("PASS tkad trapping mutant rejected, not counted as detection")
+
+note_guard = "if and eq dsget 9 0 eq dsget 10 0\nret 1\nend\n"
+assert source.count(note_guard) == 1
+path = root / "build" / "tkad-mutant-no-identity"
+build = subprocess.run([omc], input=source.replace(note_guard, "").encode(), capture_output=True)
+assert build.returncode == 0, build.stderr.decode()
+path.write_bytes(build.stdout)
+path.chmod(0o700)
+probe = subprocess.run([sys.executable, str(root / "cmd/tkad/test/identity.py"), str(path), "--probe"], capture_output=True, text=True, timeout=120)
+assert probe.returncode == 0, ("mutant without the identity guard was not caught", probe.returncode, probe.stdout, probe.stderr)
+probe = subprocess.run([sys.executable, str(root / "cmd/tkad/test/identity.py"), str(binary), "--probe"], capture_output=True, text=True, timeout=120)
+assert probe.returncode == 3, ("production binary must refuse a zero identity", probe.returncode, probe.stdout, probe.stderr)
+print("PASS tkad identity guard mutant detected, and the production guard refuses")

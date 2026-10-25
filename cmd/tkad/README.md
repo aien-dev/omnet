@@ -77,7 +77,7 @@ nonempty signatures require an active authority and valid authorization. A key
 change clears the old signature. Omitting Signature preserves it only when the
 key is unchanged. Unsigned nodes may be registered and signed later; this does
 not itself authorize them to peers. Remove takes `{NodeID}`. Map/list takes `{}`
-and returns `{TKAInfo,Revision,Nodes:[{NodeID,NodePublic,RotationPubkey,KeySignature}]}`.
+and returns `{TKAInfo,Revision,StoreID,Nodes:[{NodeID,NodePublic,RotationPubkey,KeySignature}]}`.
 `RotationPubkey` is the stored32byte base64 public key, exposed for adapter reconciliation.
 Inactive and pending authority produce `TKAInfo:null`; active produces `{Head}`; disabled
 produces `{Disabled:true}`. Unsigned nodes have `KeySignature:null`.
@@ -85,7 +85,14 @@ Revision advances after each durable mutation. An exact registry upsert retry (s
 node key, rotation key and omitted or identical signature) is nonmutating: it preserves the
 revision and pending initialization, including after restart. This also permits replay of an
 already accepted historical signature without reauthorizing it under a later authority.
+`StoreID` is the 128-bit identity of the store, 32 lowercase hex digits, drawn once from the
+kernel CSPRNG by initialization and never changed afterwards. It names the store and not the
+path: it survives restarts, an epoch boundary, and a rename of the store directory, and two
+independent stores never share one. A client that follows a path can therefore tell a
+replacement apart from the store it was talking to: the directory may be swapped under it and
+the identity is the only thing that reports it.
 Adapters must propagate these full values to initial/delta map responses and arrange notifications.
+No notification transport or Headscale integration is claimed here.
 
 ## State transitions and durable publication
 
@@ -126,10 +133,32 @@ The semantic snapshot is version1: one128byte little-endian metadata frame,
 then each node's88byte record and optional signature frame, optional support and
 disablement secret frames, then each retained typed AUM frame in insertion order.
 Metadata holds status, node count, pending initiator, secret lengths, revision,
-authority count and a version marker. Node records contain ID, signature length,
+authority count, a version marker, the header schema word and the store identity,
+listed in the word table below. Node records contain ID, signature length,
 authorization-state index, raw node key and raw rotation key. Storage adds its
 own framing, version, ordered BLAKE2s integrity chain and strict permission/type
 checks; see `om/store/README.md`.
+
+The 128-byte metadata frame is sixteen little-endian 64-bit words:
+
+|Word|Meaning|Rule|
+|---|---|---|
+|0|state status|0 pending init through 3 disabled|
+|1|registered node count|at most 64|
+|2|pending initiator NodeID|0 when none, otherwise a registered node|
+|3|support-disablement secret length|at most 1024|
+|4|disablement secret length|at most 1024, stored only when disabled|
+|5|reserved|must be 0|
+|6|Revision|saturates, never wraps|
+|7|retained authority count|at most 128|
+|8|header schema|must be exactly 1|
+|9,10|store identity, low then high word|128 random bits from init, never both 0|
+|11..14|reserved|must be 0|
+|15|marker|must be 1|
+
+A header whose schema word, identity or reserved words were altered is refused
+rather than served or repaired. There is no migration from a header without a
+schema word: no build that writes one has been released.
 
 AUMs retain typed reconstruction (`tkamodel keep=1`), not merely canonical wire
 serialization: an empty-but-present update metadata map must survive restart.

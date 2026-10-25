@@ -126,6 +126,24 @@ if ne stabort 0
 exit 74
 end
 end
+note Store identity: 128 bits from the kernel CSPRNG, written once by init and never
+note changed. Words 9 and 10; word 8 is the header schema, which must be exactly 1.
+fn dsident to int
+b = new uchar 65536 0
+r = random b 0 16 0
+if ne r 16
+ret 1
+end
+lo = stget64 b ulong 0
+hi = stget64 b ulong 8
+if and eq lo 0 eq hi 0
+ret 1
+end
+dsset 8 1
+dsset 9 lo
+dsset 10 hi
+ret 0
+end
 fn dssave to int
 b = new uchar 65536 0
 dsset 7 tkacget 0
@@ -300,8 +318,14 @@ if ne dsget 2 0
 ret 1
 end
 end
-for i ulong 7
-if ne dsget add i 8 0
+if ne dsget 8 1
+ret 1
+end
+if and eq dsget 9 0 eq dsget 10 0
+ret 1
+end
+for i ulong 4
+if ne dsget add i 11 0
 ret 1
 end
 end
