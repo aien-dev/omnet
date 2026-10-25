@@ -1,0 +1,186 @@
+note SPDX-License-Identifier: Apache-2.0
+note Independent framing/semantic observer; never calls stload or daemon state helpers.
+global q_seen ulong 16
+global q_chain uchar 32
+global q_sem ulong 8
+text q_magic "OMNETSNAP0000001"
+text q_disk "SNAPSHOT status revision AUMs frames payloadbytes "
+fn qdigest b view uchar 65536 n ulong h edit uchar 32 to void
+k = new uchar 32 0
+b2shash b n k 0 32 h
+end
+fn qpayload b view uchar 65536 n ulong frame ulong count ulong to void
+if eq frame 0
+qassert eq n 128 201
+put q_seen 0 qle b 0 8
+put q_seen 1 qle b 48 8
+put q_seen 2 qle b 56 8
+qassert eq get q_seen 2 count 202
+qassert eq qle b 120 8 1 203
+for j ulong 8
+put q_sem j 0
+end
+put q_sem 0 qle b 8 8
+put q_sem 3 qle b 24 8
+put q_sem 4 qle b 32 8
+ret
+end
+qrecord b n
+end
+fn qexact b view uchar 65536 n ulong idx ulong to void
+c = new uchar 65536 0
+qassert eq qbinary idx c n 218
+for j ulong n
+qassert eq get b j get c j 219
+end
+end
+fn qaumhash b view uchar 65536 n ulong idx ulong to void
+h = new uchar 32 0
+c = new uchar 65536 0
+qdigest b n h
+qassert eq cdaumenc h c get q_len idx 220
+qencodedmatch c idx
+end
+fn qencodedmatch c view uchar 65536 idx ulong to void
+base = mul idx 2048
+for j ulong get q_len idx
+qassert eq get c j get q_fix add base j 221
+end
+end
+fn qrecord b view uchar 65536 n ulong to void
+if ne get q_sem 0 0
+if eq get q_sem 1 0
+qassert eq n 88 222
+id = qle b 0 8
+qassert and ge id 1 le id 2 223
+put q_sem 2 id
+put q_sem 1 qle b 8 8
+qassert eq get q_sem 1 177 224
+qassert eq qle b 16 8 0 225
+qnodebytes b id
+else
+qexact b n add get q_sem 2 3
+put q_sem 1 0
+put q_sem 0 sub get q_sem 0 1
+end
+ret
+end
+if ne get q_sem 3 0
+qassert eq n get q_sem 3 226
+qexact b n 14
+put q_sem 3 0
+ret
+end
+if ne get q_sem 4 0
+qassert eq n get q_sem 4 227
+qexact b n 14
+put q_sem 4 0
+ret
+end
+idx = get q_sem 5
+qassert lt idx get q_seen 2 228
+qexact b n add mul idx 2 6
+note fixture.go53-58 adds empty Meta for reconstruction; its wire hash is NOT its canonical AUMHash.
+note Exact fixture bytes above still apply; canonical head for that row comes from the upstream fixture.
+if ne idx 2
+qaumhash b n add mul idx 2 7
+end
+put q_sem 5 add idx 1
+end
+fn qnodebytes b view uchar 65536 id ulong to void
+c = new uchar 65536 0
+h = new uchar 32 0
+idx = sub id 1
+for j ulong get q_len idx
+put c j get q_fix add mul idx 2048 j
+end
+qassert ne cdnkdec c get q_len idx h 0 229
+for j ulong 32
+qassert eq get b add j 24 get h j 230
+end
+n = qbinary add id 1 c
+qassert eq n 32 231
+for j ulong 32
+qassert eq get b add j 56 get c j 232
+end
+end
+fn qopen to int
+b = new uchar 65536 0
+p = get q_cfg 6
+for j ulong p
+put b j get q_path j
+end
+for j ulong len q_snap
+put b add p j get q_snap j
+end
+fd = fopen b 0 add p len q_snap 655360 0
+qassert ge fd 0 204
+qassert eq qread int fd b 0 16 16 205
+for j ulong 16
+qassert eq get b j get q_magic j 206
+put q_seen j 0
+end
+for j ulong 32
+put q_chain j 0
+end
+ret int fd
+end
+fn qframe fd int count ulong to bool
+b = new uchar 65536 0
+d = new uchar 65536 0
+h = new uchar 32 0
+qassert eq qread fd b 0 40 40 207
+n = qle b 0 8
+if eq n 0
+for j ulong 32
+qassert eq get b add j 8 get q_chain j 208
+end
+qassert eq qread fd b 0 16 16 209
+qassert eq qle b 0 8 get q_seen 9 210
+qassert eq qle b 8 8 get q_seen 8 211
+qassert eq read fd b 0 1 0 212
+ret false
+end
+qassert le n 65536 213
+for j ulong 32
+put d j get q_chain j
+put d add j 32 get b add j 8
+end
+qassert eq qread fd b 0 n n 214
+qdigest b n h
+for j ulong 32
+qassert eq get h j get d add j 32 215
+end
+qpayload b n get q_seen 8 count
+put q_seen 8 add get q_seen 8 1
+put q_seen 9 add get q_seen 9 n
+qput d 64 8 n
+qput d 72 8 get q_seen 9
+qput d 80 8 get q_seen 8
+qdigest d 88 h
+for j ulong 32
+put q_chain j get h j
+end
+ret true
+end
+fn qsnapshot count ulong state ulong to ulong
+fd = qopen
+while qframe fd count bound 1024
+end
+z = fclose fd
+qassert eq get q_seen 0 state 216
+qassert eq get q_sem 0 0 233
+qassert eq get q_sem 3 0 234
+qassert eq get q_sem 4 0 235
+qassert eq get q_sem 5 count 217
+z = write 1 q_disk 0 len q_disk
+for j ulong 3
+qnum get q_seen j
+z = write 1 q_nl 0 1
+end
+qnum get q_seen 8
+z = write 1 q_nl 0 1
+qnum get q_seen 9
+z = write 1 q_nl 0 1
+ret get q_seen 1
+end

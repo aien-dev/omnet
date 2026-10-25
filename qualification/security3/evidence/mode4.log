@@ -1,0 +1,14 @@
+RESPONSE 200
+{}
+RESPONSE 200
+{}
+RESPONSE 200
+{"NeedSignatures":[{"NodeID":1,"NodePublic":"nodekey:0909090909090909090909090909090909090909090909090909090909090909","RotationPubkey":"+kg0FH9uaQw2k+/2EzYEZAPNiuKhTzGzxAc1hWkjlWU="},{"NodeID":2,"NodePublic":"nodekey:0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a","RotationPubkey":"GX9rI+FshTLGq8g4+s1ep4m+DHaykgM0A5v6iz02jWE="}]}
+RESPONSE 200
+{}
+SNAPSHOT status revision AUMs frames payloadbytes 2
+4
+1
+7
+940
+FAIL assertion 202

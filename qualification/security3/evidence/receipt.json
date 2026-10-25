@@ -1,0 +1,215 @@
+{
+  "profile": "SC1-A bounded native local-socket qualification; SC1 revision2 distinctions apply",
+  "base_commit": "1e075776855d4389b69b23b54b49ed230d488717",
+  "compiler_source_commit": "acb3f15cdc691b1b046b48b0dad0f9255a12ba4b",
+  "compiler_sha256": "734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61",
+  "compiler_source_sha256": "2e35db7d6c2066fb4a20d19b8a9579c44caca9c9937b0594a89422010b673637",
+  "platform": {
+    "os": "Linux",
+    "kernel": "7.0.0-1019-nvidia",
+    "machine": "aarch64",
+    "execution": "NATIVE Linux AArch64; no emulation; no GPU execution"
+  },
+  "source_sha256": {
+    "qualification/security3/io.om": "2c2d56350b89dba3932a6b06587b7468fa78e1637c0b60ae8d6b545d9d2d7a73",
+    "qualification/security3/fixture.om": "be6d0e78c6f8698e6677cf19d1390a6275071e428e381c8e6ff353d3d8191c70",
+    "qualification/security3/snapshot.om": "0936b29643690f5ca40f447140a9793cfe548445ca761586a9382acf41fe5d98",
+    "qualification/security3/cases.om": "b9f1f9bb5e3cf5a360b0c895ab39ad2ee6e08ddb02d64e2f0a36e0bd4cdd964c",
+    "qualification/security3/run.om": "8b6cadc8f8c28857092d7416b2ba07615f16a155600077261415ede22c22297d",
+    "qualification/security3/contract.txt": "d26a235dd8a8f66f40f62c6f66fdf9d0f5f73fd2886ec5c45f1e8a61d0cfb3d5"
+  },
+  "fixture_sha256": "4319f017434e94fa6af99df188e6a05936e73ff93b9468e0dce62fe0fb0f5ace",
+  "omega_pin_sha256": "50effd3c018438c14640cc4fbc534dc5f14333c331293f946e76c6dfea3eb086",
+  "builder_sha256": "4d79147f5684065c3ca5ef8bb3d9fa12d88738e5efceaead06af89ff561fea44",
+  "compiler_wrapper_sha256": "3d054309ff48f0e78cfb9f3a0cbbd0fa4174995fe763f6e2c397922fb2c4ef33",
+  "executables": {
+    "base": {
+      "source_sha256": "5a85c0e62e752b1f8631e234930af1faffdcefcad9fb8cd0da48d59a4a2c1429",
+      "binary_sha256": "c0869a7fa7fd9760feadfb30aa735a572f0baa1d71a942c4b2021e0c044cdd01"
+    },
+    "candidate": {
+      "source_sha256": "d8a99f89afc3fa9503f313d6cc03355bf5c9179af73e1e4437272169585f6872",
+      "binary_sha256": "9b453c5d806548b3de329753c1e50dce66cee4295f5decbd447c5a6e9b1f5b0c",
+      "source_commit": "parent integration handoff; complete concatenated source hash above is authoritative"
+    },
+    "client": {
+      "source_sha256": "0f142e51558ce2335b530e531f4f41e6dc56dfe4beeb8ab66d4c4d65bbde2554",
+      "binary_sha256": "0fa2c65601adfd710cd7813f51ee030abba74d5377e348e640fe03a4deae5311"
+    },
+    "runner": {
+      "source_sha256": "8b6cadc8f8c28857092d7416b2ba07615f16a155600077261415ede22c22297d",
+      "binary_sha256": "d7f33d6bd786c07f1c63c3b18e40e23cd2e64c1fb2ae108acc173188e0e787d1"
+    },
+    "fault_variant_1": {
+      "source_sha256": "492dfe932fc176244fa20f5e7634a7b192665d4af22860ea6f1cf6048af16380",
+      "binary_sha256": "15e2e3596a47adbf6987a8b79a65e23677414dbf013aab80ab508c0ae8e6d764"
+    },
+    "fault_variant_2": {
+      "source_sha256": "fe9b00de18c3707b37648156b9453614e851a8911ff03c55e2ac51841021eee6",
+      "binary_sha256": "5c778a346315fb7f7e471335def447133a47a3dcdc2c08a6ce98b27934b528d6"
+    },
+    "fault_variant_3": {
+      "source_sha256": "00330d2ce906f85826bbe8cef9dbe510845b4bc5971c84c6e437c59b36b80263",
+      "binary_sha256": "92b94c0922b6978bf4472078e0a69c854d8ee16ed6e58d77007efe77aa968f58"
+    }
+  },
+  "commands": [
+    {
+      "command": "sh tools/omc.sh",
+      "exit": 0
+    },
+    {
+      "command": "PINNED_OMC < qualification/security3/run.om > build/security3/run",
+      "exit": 0
+    },
+    {
+      "command": "build/security3/run PINNED_OMC CANDIDATE_TKAD",
+      "exit": 0,
+      "notes": "symbols denote the exact compiler and candidate binary identities above; path-only substitution omits private checkout locations"
+    }
+  ],
+  "case_exits": {
+    "baseline_mode0": 0,
+    "short_write_mode1": 0,
+    "ENOSPC_mode2": 0,
+    "postrename_mode3": 0,
+    "count_control_mode4": 41,
+    "candidate_mode5": 0
+  },
+  "expected_daemon_fault_exit": {
+    "mode3": 74,
+    "response": "none",
+    "recovered_AUM_count": 2
+  },
+  "negative_control": {
+    "kind": "compiled observer expected-count control, not an authentication bypass mutant",
+    "required_marker": "FAIL assertion 202",
+    "exit": 41,
+    "classification": "EXPECTED_NORMAL_ASSERTION_FAILURE"
+  },
+  "observed": {
+    "baseline": {
+      "benchmarks": [
+        {
+          "route": 11,
+          "arm": 0,
+          "p50_ns": 270898,
+          "p95_ns": 288898,
+          "p99_ns": 318803,
+          "requests_per_second_floor": 3641
+        },
+        {
+          "route": 11,
+          "arm": 1,
+          "p50_ns": 271026,
+          "p95_ns": 283666,
+          "p99_ns": 290051,
+          "requests_per_second_floor": 3654
+        },
+        {
+          "route": 5,
+          "arm": 0,
+          "p50_ns": 8301997,
+          "p95_ns": 9198693,
+          "p99_ns": 11070198,
+          "requests_per_second_floor": 119
+        },
+        {
+          "route": 5,
+          "arm": 1,
+          "p50_ns": 8114267,
+          "p95_ns": 9284726,
+          "p99_ns": 9424423,
+          "requests_per_second_floor": 121
+        }
+      ],
+      "single_append_reconcile_ns": 10195118,
+      "replay_revisions": [
+        5,
+        6
+      ],
+      "daemon_peak_rss_kib": 23512
+    },
+    "candidate": {
+      "benchmarks": [
+        {
+          "route": 11,
+          "arm": 0,
+          "p50_ns": 271922,
+          "p95_ns": 308274,
+          "p99_ns": 319939,
+          "requests_per_second_floor": 3529
+        },
+        {
+          "route": 11,
+          "arm": 1,
+          "p50_ns": 267954,
+          "p95_ns": 272226,
+          "p99_ns": 277394,
+          "requests_per_second_floor": 3720
+        },
+        {
+          "route": 5,
+          "arm": 0,
+          "p50_ns": 622870,
+          "p95_ns": 629478,
+          "p99_ns": 638822,
+          "requests_per_second_floor": 1599
+        },
+        {
+          "route": 5,
+          "arm": 1,
+          "p50_ns": 623990,
+          "p95_ns": 632166,
+          "p99_ns": 791752,
+          "requests_per_second_floor": 1586
+        }
+      ],
+      "single_append_reconcile_ns": 10157310,
+      "replay_revisions": [
+        5,
+        5
+      ],
+      "daemon_peak_rss_kib": 23516
+    }
+  },
+  "measurement_contract": {
+    "routes": {
+      "11": "map/read",
+      "5": "already-retained publicly signed AUM replay; not unique append throughput"
+    },
+    "warmup_requests_per_route": 10,
+    "measured_requests_per_batch": 100,
+    "batches_per_route_per_binary": 2,
+    "connections": "fresh serial AF_UNIX",
+    "state_before_measurement": "active, two fixture nodes, genesis+update; no aggregate budget integration",
+    "clock": "monons",
+    "percentile": "nearest rank",
+    "throughput": "floor(100 * 1e9 / batch_elapsed_ns)",
+    "peak": "daemon process lifetime VmHWM from proc status",
+    "ordering": "all base then all candidate; shared host; no randomized causal performance claim",
+    "single_append": "one send-close/reconciliation sample per binary; not percentile"
+  },
+  "evidence_sha256": {
+    "mode0.log": "1a63962a43f39514df0e69f7dda1b41c25c71cd2933886428bc348167ad9f482",
+    "mode1.log": "2053015448b28e8a6f12ae6b2d93352a42f29c5ca0b28688059b886674933fd7",
+    "mode2.log": "2ff5c21ebff587cb4bcd5eb977b7d61860faa684fe2a76b8f46a6cfe50a2b6f8",
+    "mode3.log": "2241b65f73e231c8d8f4e47433de1be91af01edf986818944cf683b551f19f16",
+    "mode4.log": "00c085ae2677eeaab34c0a5ab7a88096b564d752e87875824c2c02636cccc98c",
+    "mode5.log": "f1ee79a2fd6194d87671a8548c281c516f01b9fdc580f4bfd99bd6fd19f4a05e",
+    "matched-final.log": "ec3935b680693b60f62c94cf84e85196e5b696d5c8d32bb4fd49033808a7f4d0",
+    "snapshots.json": "1826e9824e4726a3b04b865f5dea07de0c9e3692ab66f7da5735e5d39bf6ba86"
+  },
+  "scope_status": {
+    "local_socket_functional": "PASS bounded native fixtures",
+    "persisted_fixture_reconciliation": "PASS independent framing/semantic observer using existing crypto/codec units",
+    "base_noop_rewrite": "OBSERVED baseline gap: Revision5->6",
+    "candidate_noop_suppression": "PASS Revision5->5",
+    "whole_service_security": "NOT_QUALIFIED",
+    "remote_principal_authentication": "NOT_RUN",
+    "aggregate_durable_budget": "BLOCKED owner integration",
+    "whole_secret_and_scheduler_secrecy": "BLOCKED owner integration",
+    "powerloss_rollback_hostile_sameUID": "OUT_OF_PROFILE",
+    "independent_final_review_clean_replay": "PARENT_GATE"
+  }
+}

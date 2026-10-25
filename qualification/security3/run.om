@@ -1,0 +1,405 @@
+note SPDX-License-Identifier: Apache-2.0
+note Build/test orchestration in Omega. Existing shell builder remains owner-controlled.
+global r_src uchar 1048576
+global r_len ulong 1
+global r_cmp uchar 4096
+global r_clen ulong 1
+global r_cand uchar 4096
+global r_canlen ulong 1
+text r_root "build/security3"
+text r_base "build/tkad"
+text r_bsrc "build/tkad.om"
+text r_client "build/security3/client"
+text r_csrc "build/security3/client.om"
+text r_paths "om/blake2s/blake2s.om|om/codec/codec.om|om/json/json.om|qualification/security3/io.om|qualification/security3/fixture.om|qualification/security3/snapshot.om|qualification/security3/cases.om|"
+text r_write "fn stwr fd int b view uchar 65536 off ulong n ulong to long\nret write fd b off n\nend"
+text r_sync "fn stsync fd int to long\nret fsync fd\nend"
+text r_short "fn stwr fd int b view uchar 65536 off ulong n ulong to long\nif gt n 7\nret write fd b off 7\nend\nret write fd b off n\nend"
+text r_space "global q_fault ulong 1\nfn stwr fd int b view uchar 65536 off ulong n ulong to long\nif eq n 16\nif eq get q_fault 0 0\nput q_fault 0 1\nret -28\nend\nend\nret write fd b off n\nend"
+text r_uncert "global q_fault ulong 1\nfn stsync fd int to long\nput q_fault 0 add get q_fault 0 1\nif eq get q_fault 0 4\nret -5\nend\nret fsync fd\nend"
+text r_build "/bin/sh|tools/build-tkad.sh|build/tkad|"
+text r_fail "FAIL runner\n"
+text r_ok "PASS security3 runner: native baseline, short-write, ENOSPC, uncertain, count-control\n"
+text r_vpre "build/security3/variant"
+text r_lpre "build/security3/run"
+text r_state "/build/security3/state"
+text r_dotom ".om"
+text r_dotlog ".log"
+text r_ctrl "FAIL assertion 202\n"
+fn rcheck ok bool to void
+if not ok
+z = write 2 r_fail 0 len r_fail
+exit 60
+end
+end
+fn rle b view uchar 65536 off ulong n ulong to ulong
+v = ulong 0
+for j ulong n
+v = or v shl ulong get b add off j mul j 8
+end
+ret v
+end
+fn rput b edit uchar 65536 off ulong n ulong v ulong to void
+for j ulong n
+put b add off j uchar and shr v mul j 8 255
+end
+end
+fn rwriteall fd int b view uchar 65536 n ulong to void
+p = ulong 0
+while lt p n bound 999999
+z = write fd b p sub n p
+rcheck gt z 0
+p = add p ulong z
+end
+end
+fn rpack b edit uchar 65536 off ulong a view uchar 65536 n ulong to ulong
+rcheck le n 4095
+rput b off 2 n
+for j ulong n
+put b add add off 2 j get a j
+end
+ret add add off 2 n
+end
+fn rwait pid long expected ulong to void
+b = new uchar 65536 0
+rcheck eq waitpid int pid b 0 4 0 pid
+rcheck eq rle b 0 4 shl expected 8
+end
+fn rcompile src view uchar 65536 sn ulong dst view uchar 65536 dn ulong to void
+fd = fopen src 0 sn 524288 0
+out = fopen dst 0 dn 524865 448
+rcheck and ge fd 0 ge out 0
+rcompilefds fd out
+end
+fn rcompilefds fd long out long to void
+b = new uchar 65536 0
+a = new uchar 65536 0
+put b 0 1
+for j ulong get r_clen 0
+put a j get r_cmp j
+end
+n = rpack b 2 a get r_clen 0
+pid = fork
+rcheck ge pid 0
+if eq pid 0
+z = dupfd int fd 0 0
+rcheck eq z 0
+z = dupfd int out 1 0
+rcheck eq z 1
+z = execprog b 0 n
+exit 61
+end
+z = fclose int fd
+z = fclose int out
+rwait pid 0
+end
+fn rbuilder to void
+b = new uchar 65536 0
+a = new uchar 65536 0
+put b 0 3
+p = ulong 2
+s = ulong 0
+for j ulong 3
+n = ulong 0
+while ne get r_build s 124 bound 128
+put a n get r_build s
+s = add s 1
+n = add n 1
+end
+s = add s 1
+p = rpack b p a n
+end
+pid = fork
+rcheck ge pid 0
+if eq pid 0
+z = execprog b 0 p
+exit 61
+end
+rwait pid 0
+end
+fn rclientbuild to void
+pbuf = new uchar 65536 0
+b = new uchar 65536 0
+out = fopen r_csrc 0 len r_csrc 524865 384
+rcheck ge out 0
+s = ulong 0
+for j ulong 7
+n = ulong 0
+while ne get r_paths s 124 bound 256
+put pbuf n get r_paths s
+s = add s 1
+n = add n 1
+end
+s = add s 1
+fd = fopen pbuf 0 n 524288 0
+rcheck ge fd 0
+while true bound 999999
+z = read int fd b 0 65536
+rcheck ge z 0
+if eq z 0
+break
+end
+rwriteall int out b ulong z
+end
+z = fclose int fd
+end
+z = fclose int out
+for j ulong len r_csrc
+put pbuf j get r_csrc j
+end
+for j ulong len r_client
+put b j get r_client j
+end
+rcompile pbuf len r_csrc b len r_client
+end
+fn rload to void
+b = new uchar 65536 0
+fd = fopen r_bsrc 0 len r_bsrc 524288 0
+rcheck ge fd 0
+p = ulong 0
+while true bound 1024
+n = read int fd b 0 65536
+rcheck ge n 0
+if eq n 0
+break
+end
+rcheck le ulong n sub ulong 1048576 p
+for j ulong ulong n
+put r_src add p j get b j
+end
+p = add p ulong n
+end
+z = fclose int fd
+put r_len 0 p
+end
+fn rmatch pos ulong mode ulong to bool
+n = len r_write
+if eq mode 3
+n = len r_sync
+end
+if gt n sub get r_len 0 pos
+ret false
+end
+for j ulong n
+v = get r_write 0
+if eq mode 3
+v = get r_sync j
+else
+v = get r_write j
+end
+if ne v get r_src add pos j
+ret false
+end
+end
+ret true
+end
+fn rvariantname b edit uchar 65536 mode ulong source ulong to ulong
+for j ulong len r_vpre
+put b j get r_vpre j
+end
+p = len r_vpre
+put b p uchar add mode 48
+p = add p 1
+if ne source 0
+for j ulong len r_dotom
+put b add p j get r_dotom j
+end
+p = add p len r_dotom
+end
+ret p
+end
+fn rvariant mode ulong to void
+b = new uchar 65536 0
+src = new uchar 65536 0
+dst = new uchar 65536 0
+sn = rvariantname src mode 1
+dn = rvariantname dst mode 0
+fd = fopen src 0 sn 524865 384
+rcheck ge fd 0
+p = ulong 0
+hits = ulong 0
+while lt p get r_len 0 bound 999999
+if rmatch p mode
+hits = add hits 1
+if eq mode 1
+z = write int fd r_short 0 len r_short
+rcheck eq z long len r_short
+else
+if eq mode 2
+z = write int fd r_space 0 len r_space
+rcheck eq z long len r_space
+else
+z = write int fd r_uncert 0 len r_uncert
+rcheck eq z long len r_uncert
+end
+end
+if eq mode 3
+p = add p len r_sync
+else
+p = add p len r_write
+end
+else
+put b 0 get r_src p
+rwriteall int fd b 1
+p = add p 1
+end
+end
+rcheck eq hits 1
+z = fclose int fd
+rcompile src sn dst dn
+end
+fn rnumber b edit uchar 65536 off ulong v ulong to ulong
+c = new uchar 32 0
+n = ulong 0
+while true bound 32
+put c n uchar add rem v 10 48
+n = add n 1
+v = div v 10
+if eq v 0
+break
+end
+end
+for j ulong n
+put b add off j get c sub sub n 1 j
+end
+ret add off n
+end
+fn rruncase mode ulong to void
+b = new uchar 65536 0
+a = new uchar 65536 0
+logpath = new uchar 65536 0
+put b 0 5
+for j ulong len r_client
+put a j get r_client j
+end
+p = rpack b 2 a len r_client
+n = rbasearg a mode
+p = rpack b p a n
+n = rvariantname a mode 0
+if or eq mode 0 eq mode 4
+for j ulong len r_base
+put a j get r_base j
+end
+n = len r_base
+end
+p = rpack b p a n
+n = rcwd a
+for j ulong len r_state
+put a add ulong n j get r_state j
+end
+u = rnumber a add ulong n len r_state ulong getpid
+put a u 45
+u = add u 1
+put a u uchar add mode 48
+u = add u 1
+p = rpack b p a u
+put a 0 uchar add mode 48
+p = rpack b p a 1
+for j ulong len r_lpre
+put logpath j get r_lpre j
+end
+u = rnumber logpath len r_lpre ulong getpid
+put logpath u 45
+u = add u 1
+put logpath u uchar add mode 48
+u = add u 1
+for j ulong len r_dotlog
+put logpath add u j get r_dotlog j
+end
+u = add u len r_dotlog
+fd = fopen logpath 0 u 524993 384
+rcheck ge fd 0
+pid = fork
+rcheck ge pid 0
+if eq pid 0
+z = dupfd int fd 1 0
+rcheck eq z 1
+z = dupfd int fd 2 0
+rcheck eq z 2
+z = execprog b 0 p
+exit 61
+end
+z = fclose int fd
+expect = ulong 0
+if eq mode 4
+expect = ulong 41
+end
+rwait pid expect
+fd = fopen logpath 0 u 524288 0
+rcheck ge fd 0
+rshow int fd mode
+end
+fn rshow fd int mode ulong to void
+a = new uchar 65536 0
+n = rread int fd a
+if eq mode 4
+found = ulong 0
+for j ulong add sub ulong n len r_ctrl 1
+same = ulong 1
+for k ulong len r_ctrl
+if ne get a add j k get r_ctrl k
+same = ulong 0
+end
+end
+found = or found same
+end
+rcheck ne found 0
+end
+rwriteall 1 a ulong n
+z = fclose int fd
+end
+fn rcwd b edit uchar 65536 to ulong
+n = cwd b 0 4096
+rcheck gt n 0
+ret sub ulong n 1
+end
+fn rread fd int b edit uchar 65536 to ulong
+n = read fd b 0 65536
+rcheck gt n 0
+ret ulong n
+end
+fn rbasearg a edit uchar 65536 mode ulong to ulong
+if eq mode 5
+for j ulong get r_canlen 0
+put a j get r_cand j
+end
+ret get r_canlen 0
+end
+for j ulong len r_base
+put a j get r_base j
+end
+ret len r_base
+end
+fn main to int
+b = new uchar 65536 0
+n = argread 1 b 0 4096
+rcheck gt n 0
+put r_clen 0 ulong n
+for j ulong ulong n
+put r_cmp j get b j
+end
+if eq argcnt 3
+n = argread 2 b 0 4096
+rcheck gt n 0
+put r_canlen 0 ulong n
+for j ulong ulong n
+put r_cand j get b j
+end
+end
+z = makedir r_root 0 len r_root 448
+rcheck or eq z 0 eq z -17
+rbuilder
+rclientbuild
+rload
+for j ulong 3
+rvariant add j 1
+end
+for j ulong 5
+rruncase j
+end
+if ne get r_canlen 0 0
+rruncase 5
+end
+z = write 1 r_ok 0 len r_ok
+ret 0
+end

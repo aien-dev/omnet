@@ -1,0 +1,288 @@
+note SPDX-License-Identifier: Apache-2.0
+note Qualification client only; no daemon/store/authentication implementation.
+global q_cfg ulong 16
+global q_path uchar 4096
+global q_exec uchar 4096
+global q_sock uchar 128
+global q_out uchar 65536
+global q_times ulong 100
+text q_nl "\n"
+text q_fail "FAIL assertion "
+text q_pass "PASS assertion "
+text q_raw "RESPONSE "
+text q_snap "/snapshot"
+text q_suff "/tkad.sock"
+text q_init "--init"
+text q_proc "/proc/"
+text q_status "/status"
+text q_res "RESOURCE daemon Vm* kB from proc status; VmHWM is process-lifetime peak\n"
+fn qnum v ulong to void
+b = new uchar 65536 0
+n = jsonu64 b 0 v
+z = write 1 b 0 n
+end
+fn qassert ok bool id ulong to void
+b = new uchar 4 0
+if not ok
+z = write 1 q_fail 0 len q_fail
+qnum id
+z = write 1 q_nl 0 1
+if ne get q_cfg 0 0
+z = killpid int get q_cfg 0 9
+z = waitpid int get q_cfg 0 b 0 4 0
+end
+exit 41
+end
+put q_cfg 1 add get q_cfg 1 1
+end
+fn qrow id ulong to void
+z = write 1 q_pass 0 len q_pass
+qnum id
+z = write 1 q_nl 0 1
+end
+fn qle b view uchar 65536 p ulong n ulong to ulong
+v = ulong 0
+for j ulong n
+v = or v shl ulong get b add p j mul j 8
+end
+ret v
+end
+fn qput b edit uchar 65536 p ulong n ulong v ulong to void
+for j ulong n
+put b add p j uchar and shr v mul j 8 255
+end
+end
+fn qread fd int b edit uchar 65536 off ulong n ulong to ulong
+p = ulong 0
+while lt p n bound 999999
+qassert gt waitio fd 1 30000000000 0 909
+r = read fd b add off p sub n p
+if eq r -4
+continue
+end
+if le r 0
+ret p
+end
+p = add p ulong r
+end
+ret p
+end
+fn qsend fd int b view uchar 65536 n ulong to void
+p = ulong 0
+while lt p n bound 999999
+r = send fd b p sub n p 0
+qassert gt r 0 901
+p = add p ulong r
+end
+end
+fn qconnect to int
+fd = socknew 1 524289 0
+qassert ge fd 0 902
+z = connect int fd q_sock 0 get q_cfg 2
+if ne z 0
+z = fclose int fd
+ret -1
+end
+ret int fd
+end
+fn qrpc b view uchar 65536 n ulong route ulong node ulong admin ulong lost ulong to ulong
+h = new uchar 65536 0
+put h 0 84
+put h 1 75
+put h 2 65
+put h 3 1
+put h 4 uchar route
+put h 5 uchar admin
+qput h 8 8 node
+qput h 16 4 n
+fd = qconnect
+qassert ge fd 0 903
+qsend fd h 20
+if le n 65536
+qsend fd b n
+end
+if eq lost 1
+z = fclose fd
+ret 0
+end
+ret qresponse fd
+end
+fn qresponse fd int to ulong
+r = new uchar 65536 0
+got = qread fd r 0 12
+if eq got 0
+z = fclose fd
+ret 0
+end
+qassert eq got 12 904
+qassert eq qle r 0 4 21056340 905
+qassert eq qle r 6 2 0 906
+size = qle r 8 4
+qassert le size 65536 907
+status = qle r 4 2
+qassert eq qread fd r 0 size size 908
+z = fclose fd
+for j ulong size
+put q_out j get r j
+end
+put q_cfg 3 size
+if eq get q_cfg 4 0
+z = write 1 q_raw 0 len q_raw
+qnum status
+z = write 1 q_nl 0 1
+z = write 1 r 0 size
+z = write 1 q_nl 0 1
+end
+ret status
+end
+fn qstop to void
+b = new uchar 65536 0
+pid = int get q_cfg 0
+qassert gt pid 0 910
+z = killpid pid 9
+qassert eq waitpid pid b 0 4 0 long pid 911
+qassert eq and qle b 0 4 127 9 912
+put q_cfg 0 0
+end
+fn qstart init ulong variant ulong to void
+b = new uchar 65536 0
+p = ulong 2
+put b 0 2
+if ne init 0
+put b 0 3
+end
+n = get q_cfg 5
+if ne variant 0
+n = get q_cfg 8
+end
+qput b p 2 n
+p = add p 2
+for j ulong n
+if eq variant 0
+put b add p j get q_exec j
+else
+put b add p j get q_exec add 2048 j
+end
+end
+p = add p n
+qput b p 2 get q_cfg 6
+p = add p 2
+for j ulong get q_cfg 6
+put b add p j get q_path j
+end
+p = add p get q_cfg 6
+if ne init 0
+qput b p 2 len q_init
+p = add p 2
+for j ulong len q_init
+put b add p j get q_init j
+end
+p = add p len q_init
+end
+pid = fork
+qassert ge pid 0 913
+if eq pid 0
+z = execprog b 0 p
+exit 90
+end
+put q_cfg 0 ulong pid
+for j ulong 1000
+fd = qconnect
+if ge fd 0
+z = fclose fd
+ret
+end
+z = sleepns 10000000
+end
+qassert false 914
+end
+fn qsetup to void
+b = new uchar 65536 0
+n = argread 1 b 0 2048
+qassert gt n 0 915
+put q_cfg 5 ulong n
+for j ulong ulong n
+put q_exec j get b j
+end
+n = argread 2 b 0 2048
+qassert gt n 0 916
+put q_cfg 8 ulong n
+for j ulong ulong n
+put q_exec add 2048 j get b j
+end
+n = argread 3 b 0 100
+qassert gt n 0 917
+put q_cfg 6 ulong n
+for j ulong ulong n
+put q_path j get b j
+put q_sock add 2 j get b j
+end
+put q_sock 0 1
+for j ulong len q_suff
+put q_sock add add 2 ulong n j get q_suff j
+end
+put q_cfg 2 add add ulong n len q_suff 3
+qassert eq makedir b 0 ulong n 448 0 918
+n = argread 4 b 0 16
+qassert eq n 1 919
+put q_cfg 7 sub ulong get b 0 48
+end
+fn qresources to void
+b = new uchar 65536 0
+c = new uchar 65536 0
+for j ulong len q_proc
+put b j get q_proc j
+end
+p = jsonu64 b len q_proc get q_cfg 0
+for j ulong len q_status
+put b add p j get q_status j
+end
+fd = fopen b 0 add p len q_status 524288 0
+qassert ge fd 0 930
+n = read int fd c 0 65536
+qassert gt n 0 931
+z = fclose int fd
+z = write 1 q_res 0 len q_res
+p = ulong 0
+while lt p ulong n bound 65536
+start = p
+while and lt p ulong n ne get c p 10 bound 65536
+p = add p 1
+end
+if eq get c start 86
+z = write 1 c start sub p start
+z = write 1 q_nl 0 1
+end
+p = add p 1
+end
+end
+fn qbadframe kind ulong to void
+h = new uchar 65536 0
+b = new uchar 65536 0
+qput h 0 4 21056340
+put h 4 11
+put h 5 1
+qput h 16 4 2
+if eq kind 0
+put h 3 2
+end
+if eq kind 1
+put h 5 2
+end
+if eq kind 2
+put h 6 1
+end
+fd = qconnect
+qassert ge fd 0 940
+if eq kind 3
+qsend fd h 3
+else
+qsend fd h 20
+end
+if eq kind 4
+put b 0 123
+qsend fd b 1
+end
+z = shutdown fd 1
+qassert eq qresponse fd 0 941
+end

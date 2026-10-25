@@ -1,0 +1,344 @@
+note SPDX-License-Identifier: Apache-2.0
+global q_pipes ulong 8
+text q_replay "REPLAY revisions before after (rewrite is not logical duplication)\n"
+text q_bench "BENCH route arm p50ns p95ns p99ns requests_per_second\n"
+text q_samps "SAMPLES ns (original order)\n"
+text q_aplat "APPEND_RECONCILE_NS one sample, includes pipe release, send-close, map reconciliation\n"
+text q_gen "{\"GenesisAUM\":"
+text q_dis "{\"DisablementSecret\":"
+fn qnegative to void
+b = new uchar 65536 0
+n = qappend b 0 8 9
+qassert eq qrpc b n 5 99 0 0 403 301
+qassert eq qrpc b n 5 2 0 0 403 302
+n = qregister b 0
+qassert eq qrpc b n 9 0 0 0 403 303
+n = qlit b 0 12
+qassert eq qrpc b n 250 0 1 0 404 304
+for j ulong 3
+n = qlit b 0 add j 16
+qassert eq qrpc b n 5 1 0 0 400 305
+end
+qassert eq qrpc b 65537 5 1 0 0 0 306
+qassert eq qrpc b 4294967295 5 1 0 0 0 307
+n = qbase b 0
+n = qlit b n 5
+n = qvalue b n 9
+n = qlit b n 19
+qassert eq qrpc b n 5 1 0 0 400 308
+n = qappend b 0 8 7
+qassert eq qrpc b n 5 1 0 0 409 309
+qbadupdate b
+for j ulong 5
+qbadframe j
+end
+n = qsnapshot 1 2
+qhead 7
+qrow 300
+end
+fn qbadupdate b edit uchar 65536 to void
+c = new uchar 65536 0
+d = new uchar 65536 0
+n = qbinary 8 c
+put c sub n 1 xor get c sub n 1 1
+size = cdb64enc c n d
+n = qbase b 0
+n = qlit b n 5
+n = qvalue b n 9
+n = qlit b n 6
+n = jsonstr b n d size
+n = qlit b n 7
+qassert eq qrpc b n 5 1 0 0 400 310
+end
+fn qmkpipe idx ulong to void
+b = new uchar 65536 0
+qassert eq pipefds b 0 8 524288 0 320
+put q_pipes mul idx 2 qle b 0 4
+put q_pipes add mul idx 2 1 qle b 4 4
+end
+fn qbyte fd int wr ulong to void
+b = new uchar 65536 1
+if ne wr 0
+qassert eq write fd b 0 1 1 321
+else
+qassert eq qread fd b 0 1 1 322
+end
+end
+fn qchild idx ulong node ulong lost ulong expect ulong to long
+b = new uchar 65536 0
+pid = fork
+qassert ge pid 0 323
+if eq pid 0
+put q_cfg 0 0
+n = qappend b sub node 1 8 9
+qbyte int get q_pipes add mul idx 4 3 1
+qbyte int get q_pipes mul idx 4 0
+qassert eq qrpc b n 5 node 0 lost expect 324
+qbyte int get q_pipes add mul idx 4 3 1
+exit 0
+end
+ret pid
+end
+fn qjoin pid long to void
+b = new uchar 65536 0
+qassert eq waitpid int pid b 0 4 0 pid 325
+qassert eq qle b 0 4 0 326
+end
+fn qclosepipes to void
+for j ulong 8
+z = fclose int get q_pipes j
+end
+end
+fn qtwoclient to void
+for j ulong 4
+qmkpipe j
+end
+a = qchild 0 1 1 0
+b = qchild 1 2 0 200
+qbyte int get q_pipes 2 0
+qbyte int get q_pipes 6 0
+start = monons
+qbyte int get q_pipes 1 1
+qbyte int get q_pipes 2 0
+qjoin a
+note A's completion means send+close only; map reconciliation establishes actual publication.
+qhead 9
+elapsed = ulong sub monons start
+z = write 1 q_aplat 0 len q_aplat
+qnum elapsed
+z = write 1 q_nl 0 1
+before = qsnapshot 2 2
+qbyte int get q_pipes 5 1
+qbyte int get q_pipes 6 0
+qjoin b
+qhead 9
+after = qsnapshot 2 2
+z = write 1 q_replay 0 len q_replay
+qnum before
+z = write 1 q_nl 0 1
+qnum after
+z = write 1 q_nl 0 1
+qassert ge after before 327
+if eq get q_cfg 7 5
+qassert eq after before 328
+end
+qclosepipes
+qrow 320
+end
+fn qrevokereg to void
+b = new uchar 65536 0
+for j ulong 4
+qmkpipe j
+end
+pid = qchild 0 2 0 403
+qbyte int get q_pipes 2 0
+n = qlit b 0 15
+qassert eq qrpc b n 10 0 1 0 200 330
+qbyte int get q_pipes 1 1
+qbyte int get q_pipes 2 0
+qjoin pid
+qclosepipes
+qhead 9
+n = qsnapshot 2 2
+qrow 330
+end
+fn qchain to void
+b = new uchar 65536 0
+n = qappend b 0 10 11
+qassert eq qrpc b n 5 1 0 0 200 340
+n = qappend b 0 12 13
+qassert eq qrpc b n 5 1 0 0 200 341
+n = qbase b 0
+n = qlit b n 14
+n = qvalue b n 4
+n = qlit b n 11
+qassert eq qrpc b n 7 1 0 0 403 342
+qhead 13
+n = qsnapshot 4 2
+qstop
+qstart 0 0
+qhead 13
+n = qsnapshot 4 2
+qrow 340
+end
+fn qdisable b edit uchar 65536 head ulong secret ulong to ulong
+n = qbase b 0
+n = qlit b n 5
+n = qvalue b n head
+n = qlit b n 13
+if eq secret 0
+n = qlit b n 20
+else
+n = qvalue b n 14
+end
+ret qlit b n 11
+end
+fn qboot to void
+b = new uchar 65536 0
+n = qbase b 0
+n = qlit b n 5
+n = qvalue b n 13
+n = qlit b n 11
+qassert eq qrpc b n 3 1 0 0 200 350
+end
+fn qbootexact idx ulong to void
+b = new uchar 65536 0
+p = len q_gen
+if eq idx 6
+for j ulong p
+put b j get q_gen j
+end
+else
+p = len q_dis
+for j ulong p
+put b j get q_dis j
+end
+end
+p = qvalue b p idx
+p = qlit b p 11
+qassert eq p get q_cfg 3 361
+for j ulong p
+qassert eq get b j get q_out j 362
+end
+end
+fn qdisclosure to void
+b = new uchar 65536 0
+qboot
+qbootexact 6
+qassert qcontains 6 351
+qassert not qcontains 14 352
+n = qdisable b 13 1
+qassert eq qrpc b n 6 1 0 0 403 353
+n = qdisable b 7 1
+qassert eq qrpc b n 6 1 1 0 409 354
+n = qdisable b 13 0
+qassert eq qrpc b n 6 1 1 0 403 355
+n = qdisable b 13 1
+qassert eq qrpc b n 6 1 1 0 200 356
+qboot
+qbootexact 14
+qassert qcontains 14 357
+qassert not qcontains 6 358
+n = qsnapshot 4 3
+qstop
+qstart 0 0
+qboot
+qbootexact 14
+qassert qcontains 14 359
+n = qsnapshot 4 3
+qrow 350
+end
+fn qbenchreq route ulong to void
+b = new uchar 65536 0
+if eq route 11
+qmap
+else
+n = qappend b 0 8 9
+qassert eq qrpc b n 5 1 0 0 200 360
+end
+end
+fn qmeasure route ulong to void
+put q_cfg 4 1
+for j ulong 10
+qbenchreq route
+end
+for arm ulong 2
+start = monons
+for j ulong 100
+a = monons
+qbenchreq route
+put q_times j ulong sub monons a
+end
+total = ulong sub monons start
+qstats route arm total
+end
+put q_cfg 4 0
+end
+fn qstats route ulong arm ulong total ulong to void
+z = write 1 q_samps 0 len q_samps
+for j ulong 100
+qnum get q_times j
+z = write 1 q_nl 0 1
+end
+note Selection sort, bounded100, outside measured interval. Nearest rank percentiles.
+for j ulong 100
+for k ulong sub 100 j
+idx = add j k
+if lt get q_times idx get q_times j
+v = get q_times idx
+put q_times idx get q_times j
+put q_times j v
+end
+end
+end
+z = write 1 q_bench 0 len q_bench
+qnum route
+z = write 1 q_nl 0 1
+qnum arm
+z = write 1 q_nl 0 1
+qnum get q_times 49
+z = write 1 q_nl 0 1
+qnum get q_times 94
+z = write 1 q_nl 0 1
+qnum get q_times 98
+z = write 1 q_nl 0 1
+qnum div ulong 100000000000 total
+z = write 1 q_nl 0 1
+end
+fn qfault to void
+b = new uchar 65536 0
+qstop
+qstart 0 1
+n = qappend b 0 8 9
+mode = get q_cfg 7
+if eq mode 2
+qassert eq qrpc b n 5 1 0 0 503 401
+v = qsnapshot 1 2
+qhead 7
+qassert eq qrpc b n 5 1 0 0 200 402
+else
+if eq mode 3
+qassert eq qrpc b n 5 1 0 0 0 403
+pid = get q_cfg 0
+qassert eq waitpid int pid b 0 4 0 long pid 404
+qassert eq qle b 0 4 18944 405
+put q_cfg 0 0
+qstart 0 0
+else
+qassert eq qrpc b n 5 1 0 0 200 406
+end
+end
+qhead 9
+v = qsnapshot 2 2
+qstop
+qstart 0 0
+qhead 9
+v = qsnapshot 2 2
+qrow 400
+end
+fn main to int
+qsetup
+qfixture
+qstart 1 0
+qenable
+n = qsnapshot 1 2
+if eq get q_cfg 7 4
+n = qsnapshot 2 2
+qassert false 499
+end
+if or eq get q_cfg 7 0 eq get q_cfg 7 5
+qnegative
+qtwoclient
+qmeasure 11
+qmeasure 5
+qresources
+qrevokereg
+qchain
+qdisclosure
+else
+qfault
+end
+qstop
+qrow 999
+ret 0
+end

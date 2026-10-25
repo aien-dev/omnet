@@ -1,0 +1,155 @@
+note SPDX-License-Identifier: Apache-2.0
+global q_fix uchar 32768
+global q_len ulong 16
+text q_file "cmd/tkad/test/fixture.json"
+text q_keys "nodes|rotations|signatures|genesis|head|update|updatedHead|emptyMeta|emptyHead|removal|removedHead|secret|"
+text q_lits "{\"Version\":131,\"NodeKey\":|,\"GenesisAUM\":|,\"Signatures\":{\"1\":|,\"2\":|},\"SupportDisablement\":|,\"Head\":|,\"MissingAUMs\":[|],\"Interactive\":true}|{\"NodeID\":|,\"NodeKey\":|,\"RotationPubkey\":|}|{}|,\"DisablementSecret\":|,\"Signature\":|{\"NodeID\":2}|{\"NodeKey\":\"x\",\"NodeKey\":\"y\"}|{ |{}{}|,\"MissingAUMs\":[\"AA==\"],\"Interactive\":true}|\"AA==\"|"
+fn qlit b edit uchar 65536 p ulong idx ulong to ulong
+s = ulong 0
+for j ulong idx
+while ne get q_lits s 124 bound 512
+s = add s 1
+end
+s = add s 1
+end
+while ne get q_lits s 124 bound 512
+qassert lt p 65536 920
+put b p get q_lits s
+p = add p 1
+s = add s 1
+end
+ret p
+end
+fn qfind t view ulong 32768 d view uchar 65536 idx ulong to ulong
+b = new uchar 65536 0
+s = ulong 0
+for j ulong idx
+while ne get q_keys s 124 bound 256
+s = add s 1
+end
+s = add s 1
+end
+n = ulong 0
+while ne get q_keys s 124 bound 256
+put b n get q_keys s
+n = add n 1
+s = add s 1
+end
+ret jsonfind t d 1 b n
+end
+fn qstore t view ulong 32768 d view uchar 65536 id ulong slot ulong to void
+b = new uchar 65536 0
+n = jsoncopy t d id b
+qassert lt n 2048 921
+put q_len slot n
+for j ulong n
+put q_fix add mul slot 2048 j get b j
+end
+end
+fn qfixture to void
+b = new uchar 65536 0
+d = new uchar 65536 0
+t = new ulong 32768 0
+fd = fopen q_file 0 len q_file 524288 0
+qassert ge fd 0 922
+n = read int fd b 0 65536
+qassert gt n 0 923
+z = fclose int fd
+qassert eq jsonparse b ulong n t d 0 924
+for j ulong 3
+id = qfind t d j
+qstore t d add id 1 mul j 2
+qstore t d add id 2 add mul j 2 1
+end
+for j ulong 9
+qstore t d qfind t d add j 3 add j 6
+end
+qstore t d add qfind t d 2 3 15
+end
+fn qvalue b edit uchar 65536 p ulong idx ulong to ulong
+c = new uchar 65536 0
+for j ulong get q_len idx
+put c j get q_fix add mul idx 2048 j
+end
+ret jsonstr b p c get q_len idx
+end
+fn qbase b edit uchar 65536 node ulong to ulong
+p = qlit b 0 0
+ret qvalue b p node
+end
+fn qregister b edit uchar 65536 node ulong to ulong
+p = qlit b 0 8
+p = jsonu64 b p add node 1
+p = qlit b p 9
+p = qvalue b p node
+p = qlit b p 10
+p = qvalue b p add node 2
+ret qlit b p 11
+end
+fn qenable to void
+b = new uchar 65536 0
+for j ulong 2
+n = qregister b j
+qassert eq qrpc b n 9 0 1 0 200 101
+end
+n = qbase b 0
+n = qlit b n 1
+n = qvalue b n 6
+n = qlit b n 11
+qassert eq qrpc b n 1 1 1 0 200 102
+n = qbase b 0
+n = qlit b n 2
+n = qvalue b n 4
+n = qlit b n 3
+n = qvalue b n 5
+n = qlit b n 4
+n = qvalue b n 14
+n = qlit b n 11
+qassert eq qrpc b n 2 1 1 0 200 103
+end
+fn qappend b edit uchar 65536 node ulong aum ulong head ulong to ulong
+p = qbase b node
+p = qlit b p 5
+p = qvalue b p head
+p = qlit b p 6
+p = qvalue b p aum
+ret qlit b p 7
+end
+fn qmap to void
+b = new uchar 65536 0
+n = qlit b 0 12
+qassert eq qrpc b n 11 0 1 0 200 104
+end
+fn qcontains idx ulong to bool
+n = get q_len idx
+if gt n get q_cfg 3
+ret false
+end
+for j ulong add sub get q_cfg 3 n 1
+if qmatch idx j n
+ret true
+end
+end
+ret false
+end
+fn qmatch idx ulong pos ulong n ulong to bool
+base = mul idx 2048
+for k ulong n
+v = get q_out add pos k
+if ne v get q_fix add base k
+ret false
+end
+end
+ret true
+end
+fn qhead idx ulong to void
+qmap
+qassert qcontains idx 105
+end
+fn qbinary idx ulong b edit uchar 65536 to ulong
+c = new uchar 65536 0
+for j ulong get q_len idx
+put c j get q_fix add mul idx 2048 j
+end
+ret cdb64dec c get q_len idx b
+end

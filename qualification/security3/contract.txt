@@ -1,0 +1,29 @@
+SC1-A qualification v1, frozen before harness implementation
+Owner source: omnet feat/tkad-service 1e075776855d4389b69b23b54b49ed230d488717
+Synthetic fixture: cmd/tkad/test/fixture.json, real tailscale.com/tka v1.102.0.
+No implementation of TKA, store, daemon, compiler or authentication is added.
+
+IPC: cmd/tkad/README.md version1, LE20-byte header, max65536 body; one connection/request. Header NodeID and admin are trusted sameUID adapter assertions, not remote authentication. NodeKey is bound to registered NodeID. Only positive signed64 NodeIDs are supported. Route5 appends publicly signed MissingAUMs, requires active authority, validates signatures and Interactive resulting Head. Version131 is protocol version, not policy epoch. There is no operation-id, explicit expected policy epoch, object generation, aggregate ledger or public envelope in this owner head.
+
+Expected cases:
+Q01 register two synthetic nodes; begin/finish genesis; all200; persisted count1.
+Q02 wrong NodeID99 and mismatched NodeKey:403. Missing admin for route9:403. Unknown route250:404. No persisted changes.
+Q03 malformed JSON, trailing root, duplicate key:400. Oversized length65537 and maximal u32 length4294967295:connection closed with no reply. Small wrapped wire length cannot express original operands: NOT_RUN original-operand protection, never claim otherwise.
+Q04 route5 invalid encoded AUM:400; bit-flipped signature:400 (rpc.om tkastage/tkacommit refusal); Interactive old head with new valid update:409, no publication.
+Q05 two forked clients, pipe gates. A sends signed update and closes without reading acknowledgment; parent reconciles map/head and independently opens snapshot:count2, exact update frame. B replays same signed AUM after A is reconciled:200, count remains2. Replay is upstream-compatible no-op, not replay refusal; baseline may rewrite/revise and must be reported.
+Q06 second schedule prepares node2 request before parent removes node2; release only after remove200; child gets403. This is serialization-before-admission, not in-handler prepare/commit fault instrumentation. No explicit epoch/version test is claimed.
+Q07 signed empty metadata and signed removal advance authority. Old node signature route7 rejects403 after removal; restart retains count/head and historical bytes.
+Q08 separate disclosure: active bootstrap includes GenesisAUM and omits DisablementSecret despite retained SupportDisablement. Wrong disable secret403; stale Head409; no admin403. Valid disable200 deliberately authorizes public bootstrap exact synthetic secret. Restart retains disabled disclosure. This is output-policy testing, not timing/secrecy proof.
+Q09 existing syscall wrapper seam only in separately generated test binaries: short-write7-byte chunks must complete normally; first mutation header ENOSPC must return503 without durable change then next mutation200; first mutation directory fsync EIO must exit74 with no response, recovery admits renamed candidate. No crash is counted as success except exact expected74/no-reply boundary. No power-loss claim.
+Q10 independent snapshot reader checks magic, payload lengths/digests, ordered BLAKE2s chain, totals, EOF, status/revision/AUM count, exact retained fixture AUM bytes. Negative control changes expected count and must complete normally with named FAIL, not trap.
+Q11 matched request benchmark: same compiled daemon, same active fixture/count, route11 map, serial fresh connections, warmup then two equal100-request arms. Report monotonic per-request ns, nearest-rank p50/p95/p99 and requests/s; no protected-implementation speedup claim. Peak resource may be reported only if actually observed.
+
+Out of profile: hostile sameUID/root, untrusted ancestors, cross-network-namespace writers, rollback, powerloss, physical timing/caches/speculation. Unsupported owner interfaces: aggregate durable reservations (BudgetLane + WORM), whole-secret closure (SecrecyLane), explicit operation identity/epoch/object-version, in-handler revocation and pathname/descriptor substitution hooks. SameUID destructive replacement is outside trust, not an authenticated attack test.
+
+SC1 revision2 alignment and parent-requested measurement amendment:
+- NodeID is an adapter-asserted registered relay, not necessarily the AUM signer. AUM signatures are authorized against retained parent state and fork choice. No current-head-only authorization rule is invented.
+- Rename is linearization; directory fsync permits acknowledgement. Recovery tests are process/syscall-failure tests, not powerloss or writeback-EIO durability proof.
+- Candidate mode5 uses the identical scenario and must keep Revision unchanged on the retained-AUM replay. Its compiled binary/source are separately pinned; it is not a new authentication wrapper.
+- Q11 now measures route11 reads AND route5 idempotent signed-AUM replay: each10warmup then2x100 measured serial fresh connections, both on the same two-node/count2 state. Raw samples and process VmHWM are emitted. This is not unique-append throughput or isolated signature verification cost. One separately reported lost-ack append/reconciliation sample has no percentile claim.
+- EmptyMeta wire intentionally differs from canonical AUM serialization (fixture.go53-58). Exact ordered persisted bytes are checked against the upstream fixture; genesis/update/removal hashes are independently recomputed. EmptyMeta canonical head uses the upstream frozen oracle, not a duplicate canonicalizer.
+- Additional Q03 transport cases freeze version2/admin2/nonzero-reserved/truncated-header/partial-body-cancel as connection-close/no-response. These cases cannot increase persisted authority count.

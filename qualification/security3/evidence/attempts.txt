@@ -1,0 +1,11 @@
+Exploratory attempts before final qualification; not counted as security controls.
+1. Runner compilation refused with omc error12 at line75: source/destination arrays and process-launch locals exceeded the pinned register budget. Split rcompilefds.
+2. Runner compilation refused with error7 at line286: reused unsigned cursor for signed cwd result. Added checked rcwd/rread helpers.
+3. Runner compilation refused with error12 at line334: inline control-log scan retained too many runner locals. Split rshow.
+4. Client compilation refused error12 at concatenation line1612: qrpc retained request and response locals. Split qresponse.
+5. Client compilation refused error12 at line1849: nested fixture match expression. Split qmatch.
+6. Client compilation refused error12 at line1905 and then1940: snapshot payload matcher and scan locals. Split frame/semantic observers.
+7. First complete baseline + three fault scenarios passed, but runner exited60 after the count control: marker search excluded the last possible offset. The actual control completed with exit41 and FAIL assertion202. Inclusive final offset repaired.
+8. Strengthened snapshot observer compilation refused error12 at line1982; split encoded-head comparison.
+9. Strengthened observer exited41 at assertion221 after the key-removal scenario. Its saved raw output is observer-wire-hash-failure.log. The observer had incorrectly hashed typed empty-Meta wire bytes as if canonical; cmd/tkad/test/fixture.go53-58 explicitly adds that field to preserve a non-nil map while canonical hashing omits it. Corrected the observation contract: exact ordered bytes remain mandatory; only canonical wire fixtures get direct hash comparison. No daemon or TKA changes were made. This failed intermediate observer is not the final source-bound receipt.
+10. Corrected baseline/fault/control run exited0. Initial matched base/candidate run exited0. Final run after unique per-run log naming also exited0; receipt.json binds that final source and its outputs. Prior generated exploratory logs remain outside this committed final evidence set; no earlier committed evidence was rewritten.
