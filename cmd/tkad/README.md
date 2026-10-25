@@ -77,19 +77,22 @@ nonempty signatures require an active authority and valid authorization. A key
 change clears the old signature. Omitting Signature preserves it only when the
 key is unchanged. Unsigned nodes may be registered and signed later; this does
 not itself authorize them to peers. Remove takes `{NodeID}`. Map/list takes `{}`
-and returns `{TKAInfo,Revision,Nodes:[{NodeID,NodePublic,KeySignature}]}`. Inactive
-and pending authority produce `TKAInfo:null`; active produces `{Head}`; disabled
+and returns `{TKAInfo,Revision,Nodes:[{NodeID,NodePublic,RotationPubkey,KeySignature}]}`.
+`RotationPubkey` is the stored32byte base64 public key, exposed for adapter reconciliation.
+Inactive and pending authority produce `TKAInfo:null`; active produces `{Head}`; disabled
 produces `{Disabled:true}`. Unsigned nodes have `KeySignature:null`.
-Revision advances after each durable mutation. A future adapter must propagate
-these full values to initial/delta map responses and arrange notifications.
-No notification transport or Headscale integration is claimed here.
+Revision advances after each durable mutation. An exact registry upsert retry (same ID,
+node key, rotation key and omitted or identical signature) is nonmutating: it preserves the
+revision and pending initialization, including after restart. This also permits replay of an
+already accepted historical signature without reauthorizing it under a later authority.
+Adapters must propagate these full values to initial/delta map responses and arrange notifications.
 
 ## State transitions and durable publication
 
 Initialization binds a signed pending genesis to the initiating NodeID and the
-frozen registry. Every registry update invalidates pending initialization. Finish
-requires exactly one valid direct signature for every frozen node, including its
-registered wrapping public key. A different initiator, partial roster, stale
+frozen registry. Any actual registry change invalidates pending initialization; an exact
+upsert retry does not. Finish requires exactly one valid direct signature for every frozen
+node, including its registered wrapping public key. A different initiator, partial roster, stale
 roster, invalid signature or invalid support-disablement secret rejects. Optional
 SupportDisablement is retained separately and never disables the authority.
 Pending genesis is not visible in map or bootstrap responses.
