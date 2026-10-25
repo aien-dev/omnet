@@ -89,7 +89,14 @@ These are the sections of RFC 7693:
    - IV[0] changed by 1;
    - the final-block flag removed (`b2scomp w 1` → `b2scomp w 0`).
 
-   Each source mutant is rebuilt and must disagree with the RFC vectors.
+   Each source mutant is rebuilt and run on the RFC 7693 Appendix B case and the Appendix E
+   self-test.
+
+   A mutant counts as detected only when two things hold. First, every run completed normally:
+   exit 0, or exit 1 for `selftest` (its documented mismatch status), and complete output (one line
+   per case, each of the expected length). A trap exit (100+N), a signal or a launch failure is
+   FAIL, never detection. Second, at least one result differs from the expected one. Output goes to
+   files rather than through pipes, so no exit status is lost.
 
 `B2S_SEED` sets the differential seed. The default is 7693.
 
@@ -97,10 +104,29 @@ These are the sections of RFC 7693:
 
 | Source | Where it comes from |
 |---|---|
-| RFC 7693 Appendix B (`"abc"`) and Appendix E (`blake2s_res`) | https://www.rfc-editor.org/rfc/rfc7693.txt, fetched 2026-10-25. The text file's sha256 is `c943754888364fe29bbd0bb3c71c6658ef392371497eaa4a9d9dde015b0721e5`. |
+| RFC 7693 Appendix B (`"abc"`) and Appendix E (`blake2s_res`) | https://www.rfc-editor.org/rfc/rfc7693.txt, fetched 2026-10-25. The text file's sha256 is `c943754888364fe29bbd0bb3c71c6658ef392371497eaa4a9d9dde015b0721e5`. See "Third-party material and notices" for the notice. |
 | BLAKE2 KAT, 256 keyed cases | https://github.com/BLAKE2/BLAKE2/blob/master/testvectors/blake2s-kat.txt at commit `ed1974ea83433eba7b2d95c5dcd9ac33cb847913`, fetched 2026-10-25. The file's sha256 is `a915b96fc07f6ece3b3355a5cbb813dbf9cd0ad37c22a9b89bf11f9c47922418`. Upstream licenses it under CC0 1.0, the OpenSSL License or Apache-2.0, at the user's choice. |
 | Boundary cases (`boundary.txt`) | Generated once by `python3 test/oracle.py boundary` (CPython 3.12.3 `hashlib.blake2s`). The key is bytes `00 01 ..`; message byte i is `i mod 251`. The message lengths are 0, 1, 55, 56, 63, 64, 65, 127, 128, 129, 191, 192, 193, 1023, 1024, 1025, 65471, 65472, 65473, 65535 and 65536. Each length is run unkeyed and with a 32-byte key. The file also has keys of 1, 16 and 31 bytes, and digest lengths 1, 2, 16, 20, 28 and 31. |
 | Differential corpus (`oracle.py diff SEED`) | Every length 0..1100 twice: unkeyed with a 32-byte digest, and keyed with `kn = 1 + L%32` and `outn = 32 - L%32`. Then 64 seeded-random cases: lengths 65535, 65536 and 62 random lengths in 0..65536, key length 0..32, outn 1..32. That makes 2266 cases. |
+
+## Third-party material and notices
+
+| Copied or translated material | Owner and terms | Notice file |
+|---|---|---|
+| The `"abc"` digest (Appendix B) and the grand hash `blake2s_res` (Appendix E) in `test/vectors/rfc7693.txt`. The Appendix E self-test procedure (`selftest_seq`, the `md_len`/`in_len` tables), translated into Omega in `test/driver.om`. | Copyright (c) 2015 IETF Trust and the persons identified as the document authors. RFC 7693 is an Independent Submission stream document under BCP 78 and the IETF Trust Legal Provisions. | `test/vectors/rfc7693.NOTICE`: the RFC's Copyright Notice section, verbatim. |
+| `test/vectors/blake2s-kat.txt`, copied verbatim. | The BLAKE2 repository offers it under CC0 1.0, the OpenSSL License or Apache-2.0, at the user's choice; this repository takes it under CC0 1.0. | `test/vectors/blake2s-kat.LICENSE`: upstream `COPYING` at `ed1974ea`, verbatim (sha256 `a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499`). |
+
+Section 4 of the IETF Trust Legal Provisions (TLP 5.0) is the BSD license for code components.
+Section 8(f) says section 4 "shall not apply to documents in the Independent Submission Stream".
+Source: https://trustee.ietf.org/wp-content/uploads/Corrected-TLP-5.0-legal-provsions.pdf,
+fetched 2026-10-25. RFC 7693 material is therefore not under a BSD license: it is used here with
+attribution only, and no license for it is claimed. Whether that attribution is sufficient was not
+checked.
+
+Not copied as source text: `blake2s.om` was written for this unit from the RFC's prose and tables
+(sections 2.1, 2.6, 2.7, 3.1-3.3). Its IV and SIGMA values are the RFC's constants, and it contains
+no text from the RFC's Appendix D C code. `boundary.txt` and the differential corpus come from this
+unit's own generator, `oracle.py`.
 
 ## Evidence (2026-10-25, linux arm64 host)
 
@@ -127,6 +153,8 @@ Other runs:
 |---|---|
 | Differential seeds 1..5 | 2266/2266 each. |
 | `PATH` without python3 | Static vectors and mutants PASS, differential NOT_RUN, exit 0. |
+| Throwaway trapping mutant `put w 58 tot` → `put w 58 div tot sub tot tot` (divides by zero on every hash) | `mutant trap did not complete (exit 102, selftest exit 102) FAIL`, suite exit 1. The mutant was removed afterwards. |
+| Throwaway trapping mutant `put w 58 tot` → `put w 58 div tot sub tot 3` (traps only when the stream is 3 bytes long) | The same FAIL line, suite exit 1. The pre-fix harness counted this mutant as detected, because the selftest's empty output differed from the expected grand hash. |
 
 Hashes:
 
@@ -135,7 +163,7 @@ Hashes:
 | omega-mv pin | `acb3f15cdc691b1b046b48b0dad0f9255a12ba4b` |
 | omc sha256 | `734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61` |
 | `blake2s.om` sha256 | `f2d79b93a79621db2393d22ed4d51a216f43c286ea32461d73e1681d80b5529f` |
-| `test/driver.om` sha256 | `84fb8e43067ab4df71c6c84527efa969d374026c7e635d5712b8d11ece17eefb` |
+| `test/driver.om` sha256 | `f73b0800c9c211d9ddf6f39d71aa4c9c8a3d242f5b8a717848c76d73e4203608` |
 | driver binary sha256 | `c3c34c06f8e8aced3fc1666f3d4bb5dc7f0a8339f8cfeb6952246d8525ef11d3` |
 
 `note` lines do not change the binary.

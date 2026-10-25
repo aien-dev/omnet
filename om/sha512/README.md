@@ -61,12 +61,23 @@ script exits 0 only if every vector passes and every negative check is rejected.
 The seed defaults to 1 and can be changed with `S512_SEED`. Without python3 the two hashlib checks
 are skipped and a `NOTE` line is printed. The committed vectors still run.
 
-Negative checks (each must be rejected):
+Negative checks (each must be detected):
 
 - mutant-expected: one hex digit of the expected 'abc' digest is changed. Must produce exactly 1 failure.
 - mutant-constant: K[0] in a copy of the library is changed by one. Must produce failures on all 10 NIST examples.
 - malformed-record: a record with an odd number of hex digits. Must be refused as BAD and not hashed.
 - over-capacity: `test/trap.om` calls `s512hash` with n = 65537. Must exit 103 (trap 3).
+
+The first three count as detected only when the driver finished normally and reported the
+difference. That means exit status exactly 1, which is the driver's own "a check failed" return,
+and a complete last line `sha512 driver: C checks, F failed` with the expected C (all records) and
+F > 0. A trap (exit 100+N), a signal (128+N), a launch failure (126/127), exit 0 or a truncated
+summary all fail the run. A passing check likewise needs exit 0 and a complete `... 0 failed`
+line. Exit statuses are taken directly from the driver, never through a pipeline. This was
+checked on 2026-10-25 by temporarily replacing the K[0] mutant with one that traps 3 on every
+call (`put k 0 get k add 80 get k 1`). `run.sh` reported
+`FAIL mutant-constant: expected exit 1 and "sha512 driver: 10 checks, 10 failed", got exit 103`,
+ended with `sha512: FAIL` and exited 1. The real mutant was then restored.
 
 ## Evidence (2026-10-25)
 
@@ -75,7 +86,7 @@ Negative checks (each must be rejected):
 - `sha512.om` sha256 `069a54b75484221bc7dbacfbea744ca9002c295f4f34f2c3905b0776450e3ce2` (332 lines)
 - driver binary sha256 `a45c2e051c1cd106490c744bd42ec7884d3c01b131f0c0dbbbbe5349d56a2670`
 - `sh om/sha512/test/run.sh "$(tools/omc.sh)"`: every check above PASS, ending with
-  `sha512: PASS (1857 vector checks)`. All four negative checks were rejected as expected
+  `sha512: PASS (1857 vector checks)`, exit 0. All four negative checks were detected
   (mutant-constant: 10 of 10 failed). The run takes about 0.6 s on an arm64 Linux host.
 - `S512_SEED` = 2, 3, 4 and 5 each passed 1125 + 313 differential records.
 - With python3 removed from PATH: 419 vector checks PASS, the NOTE was printed, and all negative checks were rejected.
@@ -100,6 +111,24 @@ Negative checks (each must be rejected):
   (sha256 `0455b406d89648d20cbde375561e19c245b9815e894164c2670772e3d54deb82`).
 - NIST publishes no SHA-512 digest for the 448-bit message. Its expected value in
   `vectors/oracle.txt` comes from hashlib only.
+
+## Third-party material and notices
+
+| copied material | owner and terms | notice file |
+|---|---|---|
+| `vectors/SHA512ShortMsg.rsp`, `SHA512LongMsg.rsp`, `SHA512Monte.rsp`, byte-for-byte copies from the CAVP zip above | NIST, a US Government agency. Under 17 U.S.C. §105, works of NIST employees are not subject to copyright protection in the United States and may be subject to foreign copyright. NIST grants a worldwide royalty-free right to copy, modify and distribute, asks that NIST be acknowledged, and provides the data "AS IS" (<https://www.nist.gov/open/license>, "Fair Use of Other NIST Data/Works") | `vectors/NIST.NOTICE` |
+| digests and message descriptions in `vectors/nist-examples.txt`, transcribed from NIST `SHA512.pdf` and `SHA2_Additional.pdf` (modified on 2026-10-25: values copied into the record format, the PDF layout and intermediate values dropped) | NIST, same terms | `vectors/NIST.NOTICE`, which also records the change, as NIST's terms ask |
+
+`vectors/NIST.NOTICE` quotes NIST's recommended statement for non-SRD data/works verbatim from
+<https://www.nist.gov/open/license> (fetched 2026-10-25), names the source URLs, and states what was
+changed. The header of `nist-examples.txt` points to it. The `.rsp` files carry no notice of their
+own and are kept unmodified.
+
+FIPS 180-4 (also a NIST work) is cited by section only. Its K and H(0) values appear in
+`sha512.om` as decimal constants, and the standard defines them as cube- and square-root
+fractions. The 448-bit message in `oracle.txt` is the standard's sample text. No other
+third-party material is included: `oracle.txt` and the differential corpus are this unit's own
+output, with python3 `hashlib` used only as the reference.
 
 ## Limits
 

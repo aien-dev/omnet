@@ -9,6 +9,7 @@ note                  2*OUTN lowercase hex digits and a newline. Exit 0 at end o
 note                  2 on a malformed line (the digests already written stay on stdout).
 note driver selftest  runs the RFC 7693 Appendix E BLAKE2s self-test and prints its grand hash
 note                  (64 hex digits); exit 0 when it equals the RFC value, 1 otherwise.
+note The self-test is translated from RFC 7693 Appendix E; notice: om/blake2s/test/vectors/rfc7693.NOTICE.
 
 text tself "selftest"
 

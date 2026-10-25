@@ -27,29 +27,37 @@ build() {
 	chmod +x "$3"
 }
 
-# run_ok NAME FILE: the driver must accept every record of FILE
+# run_ok NAME FILE: the driver must exit 0 with a complete "sha512 driver: N checks, 0 failed" line
 run_ok() {
-	if "$out/driver" < "$2" > "$out/$1.out" 2>&1; then
-		line=$(tail -n 1 "$out/$1.out")
-		n=$(printf '%s\n' "$line" | awk '{print $3}')
+	set +e
+	"$out/driver" < "$2" > "$out/$1.out" 2>&1
+	rc=$?
+	set -e
+	line=$(tail -n 1 "$out/$1.out")
+	n=$(printf '%s\n' "$line" | awk '$1 == "sha512" && $2 == "driver:" && $4 == "checks," && $5 == "0" && $6 == "failed" { print $3 }')
+	if [ "$rc" -eq 0 ] && [ -n "$n" ] && [ "$n" -gt 0 ]; then
 		total=$((total + n))
 		say "PASS $1: $line"
 	else
-		fail "$1: $(tail -n 3 "$out/$1.out" | tr '\n' ' ')"
+		fail "$1: exit $rc: $(tail -n 3 "$out/$1.out" | tr '\n' ' ')"
 	fi
 }
 
-# run_fails NAME FILE WANT: the driver must exit 1 reporting exactly WANT failed checks
+# run_fails NAME FILE BIN WANT CHECKS: a mutant or negative input counts as detected only when BIN
+# completed normally and reported a difference: exit status exactly 1 (the driver's own "some check
+# failed" return; a trap exits 100+N, a signal 128+N, a launch failure 126/127), and a complete
+# summary line "sha512 driver: CHECKS checks, WANT failed" with WANT > 0.
 run_fails() {
 	set +e
 	"$3" < "$2" > "$out/$1.out" 2>&1
 	rc=$?
 	set -e
-	got=$(tail -n 1 "$out/$1.out" | awk '{print $5}')
-	if [ "$rc" -eq 1 ] && [ "$got" = "$4" ]; then
-		say "PASS $1: rejected as expected ($(tail -n 1 "$out/$1.out"))"
+	last=$(tail -n 1 "$out/$1.out")
+	want="sha512 driver: $5 checks, $4 failed"
+	if [ "$rc" -eq 1 ] && [ "$4" -gt 0 ] && [ "$last" = "$want" ]; then
+		say "PASS $1: detected ($last)"
 	else
-		fail "$1: expected exit 1 with $4 failed, got exit $rc: $(tail -n 1 "$out/$1.out")"
+		fail "$1: expected exit 1 and \"$want\", got exit $rc: $last"
 	fi
 }
 
@@ -98,7 +106,7 @@ awk 'NR == 3 { c = substr($4, 128, 1); $4 = substr($4, 1, 127) (c == "0" ? "1" :
 if cmp -s "$vec/nist-examples.txt" "$out/mut-expect.txt"; then
 	fail "mutant-expected: mutation did not change the file"
 else
-	run_fails mutant-expected "$out/mut-expect.txt" "$out/driver" 1
+	run_fails mutant-expected "$out/mut-expect.txt" "$out/driver" 1 "$(grep -c '^H ' "$vec/nist-examples.txt")"
 fi
 
 # mutant 2: K[0] changed by one in the library -> every NIST example fails
@@ -107,14 +115,14 @@ if cmp -s "$unit/sha512.om" "$out/mut-k-lib.om"; then
 	fail "mutant-constant: mutation did not change the library"
 elif build "$out/mut-k-lib.om" "$here/driver.om" "$out/mut-k"; then
 	n=$(grep -c '^H ' "$vec/nist-examples.txt")
-	run_fails mutant-constant "$vec/nist-examples.txt" "$out/mut-k" "$n"
+	run_fails mutant-constant "$vec/nist-examples.txt" "$out/mut-k" "$n" "$n"
 else
 	fail "mutant-constant: build failed"
 fi
 
 # negative: a malformed record (odd hex digit count) is refused, not hashed
 printf 'H 3 61626 %0128d\n' 0 > "$out/malformed.txt"
-run_fails malformed-record "$out/malformed.txt" "$out/driver" 1
+run_fails malformed-record "$out/malformed.txt" "$out/driver" 1 1
 
 # negative: n one past the capacity traps 3 (exit 103)
 if build "$unit/sha512.om" "$here/trap.om" "$out/trap"; then

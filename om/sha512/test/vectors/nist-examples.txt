@@ -1,4 +1,4 @@
-# NIST CSRC example values, transcribed from the PDFs named in README.md (fetched 2026-10-25)
+# NIST example values transcribed from the PDFs named in README.md (fetched 2026-10-25); terms and change notice: NIST.NOTICE
 # SHA512.pdf: one-block 'abc'
 H 3 616263 ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f
 # SHA512.pdf: two-block 896-bit message

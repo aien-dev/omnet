@@ -83,23 +83,52 @@ else
 	echo "blake2s: NOTE python3 not found, differential corpus NOT_RUN"
 fi
 
+# Mutant rules: a mutant counts as detected only when every run of the binary under test completed
+# normally (exit 0; for "selftest" also exit 1, its documented mismatch status; never a trap exit
+# 100+N, a signal or a launch failure) with complete output (one line per case, each of the
+# expected length), and at least one result differs from the expected one. Output goes to files,
+# never through a pipe, so no exit status is lost.
+
+# complete EXPECTED GOT: GOT has as many newline-ended lines as EXPECTED, each of the same length
+complete() {
+	[ "$(wc -l < "$1")" -eq "$(wc -l < "$2")" ] || return 1
+	[ -z "$(tail -c 1 "$2")" ] || return 1
+	awk 'NR == FNR { l[FNR] = length($0); next } length($0) != l[FNR] { bad = 1 } END { exit bad }' \
+		"$1" "$2"
+}
+
 # mutant 1: one flipped expected digit must be reported as a mismatch
 awk 'NR == 1 { c = substr($0, 1, 1); $0 = ((c == "0") ? "1" : "0") substr($0, 2) } { print }' \
 	"$out/kat.out" > "$out/mut-expect.out"
-if "$drv" < "$out/kat.in" | cmp -s - "$out/mut-expect.out"; then
+rc=0
+"$drv" < "$out/kat.in" > "$out/mut-expect.got" || rc=$?
+if [ "$rc" -ne 0 ] || ! complete "$out/mut-expect.out" "$out/mut-expect.got"; then
+	echo "blake2s: mutant expected-digit run did not complete (exit $rc) FAIL"
+	fail=1
+elif cmp -s "$out/mut-expect.got" "$out/mut-expect.out"; then
 	echo "blake2s: mutant expected-digit NOT detected FAIL"
 	fail=1
 else
 	echo "blake2s: mutant expected-digit detected PASS"
 fi
 
-# source mutants: each must build and then disagree with the RFC vectors
+# source mutants: each must build, run to completion on the RFC case lines and the Appendix E
+# self-test, and disagree with at least one of them
+echo "$want" > "$out/self.out"
 mutant() { # mutant NAME FROM TO
 	m="$out/mut-$1"
 	awk -v from="$2" -v to="$3" '$0 == from { $0 = to; hit++ } { print } END { exit hit != 1 }' \
 		"$unit/blake2s.om" > "$m.om" || { echo "blake2s: mutant $1 did not apply FAIL"; fail=1; return 0; }
 	build "$m.om" "$m" || { fail=1; return 0; }
-	if "$m" < "$out/rfc.in" | cmp -s - "$out/rfc.out" || [ "$("$m" selftest || true)" = "$want" ]; then
+	rc1=0
+	"$m" < "$out/rfc.in" > "$m.rfc" || rc1=$?
+	rc2=0
+	"$m" selftest > "$m.self" || rc2=$?
+	if [ "$rc1" -ne 0 ] || ! complete "$out/rfc.out" "$m.rfc" ||
+		{ [ "$rc2" -ne 0 ] && [ "$rc2" -ne 1 ]; } || ! complete "$out/self.out" "$m.self"; then
+		echo "blake2s: mutant $1 did not complete (exit $rc1, selftest exit $rc2) FAIL"
+		fail=1
+	elif cmp -s "$m.rfc" "$out/rfc.out" && [ "$rc2" -eq 0 ] && cmp -s "$m.self" "$out/self.out"; then
 		echo "blake2s: mutant $1 NOT detected FAIL"
 		fail=1
 	else

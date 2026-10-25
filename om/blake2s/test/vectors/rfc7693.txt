@@ -1,4 +1,5 @@
 # RFC 7693 (https://www.rfc-editor.org/rfc/rfc7693.txt, fetched 2026-10-25)
+# Copied from RFC 7693; notice: rfc7693.NOTICE (attribution only; no license claimed)
 # case OUTN KEY MSG DIGEST: Appendix B, BLAKE2s-256("abc")
 case 32 - 616263 508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982
 # selftest GRANDHASH: Appendix E, blake2s_res
