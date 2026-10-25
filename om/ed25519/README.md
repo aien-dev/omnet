@@ -74,8 +74,11 @@ Line citations (raw files fetched 2026-10-25):
   - `SetUniformBytes` at 42, `SetBytes(sig[:32])` at 48, and `SetCanonicalBytes` at 56.
   - `VarTimeDoubleScalarBaseMult` at 61, `Subtract` at 64, `MultByCofactor` at 65, and the
     identity `Equal` at 66.
-  - It uses `filippo.io/edwards25519` v1.0.0, whose `Point.SetBytes` (edwards25519.go 142-187)
-    and `Element.SetBytes` (field/fe.go 195-198) carry the same accept-non-canonical rule.
+  - It requires `filippo.io/edwards25519` v1.0.0, whose `Point.SetBytes` (edwards25519.go 142-187)
+    and `Element.SetBytes` (field/fe.go 195-198) carry the same accept-non-canonical rule. The test
+    oracle builds with v1.1.1, which fixes an unrelated `MultiScalarMult` bug (Dependabot alert 1).
+    In v1.1.1, `Point.SetBytes` differs from v1.0.0 only in a comment, and oracle builds on v1.0.0
+    and v1.1.1 give identical results on all 818 static cases.
 
 Point decoding follows Go's `SqrtRatio`:
 
