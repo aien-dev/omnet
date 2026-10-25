@@ -178,6 +178,24 @@ with tempfile.TemporaryDirectory(prefix="omnet-tkad-") as top:
         affected = d.rpc(8, d.req(KeyID=FIX["keyID"]))
         check(affected["Signatures"] == FIX["signatures"], "affected raw signature array")
         d.rpc(5, d.req(Head=FIX["updatedHead"], MissingAUMs=[FIX["emptyMeta"]], Interactive=True))
+        # A replay of an already-retained AUM appends nothing, so it must not
+        # persist: the snapshot bytes and Revision stay identical. The daemon
+        # rewrote the snapshot here with Revision+1 before this was pinned.
+        # File layout: 16-byte store magic, 40-byte record frame, then the
+        # 16-word daemon header (word 6 Revision, word 15 the complete marker).
+        def snapshot_state():
+            raw = (state / "snapshot").read_bytes()
+            check(raw[:16] == b"OMNETSNAP0000001", "snapshot store magic")
+            header = struct.unpack_from("<16Q", raw, 56)
+            check(header[15] == 1, "snapshot complete marker")
+            return header[6], raw
+        head_after = d.map()["TKAInfo"]["Head"]
+        revision, before_bytes = snapshot_state()
+        replay = d.rpc(5, d.req(Head=head_after, MissingAUMs=[FIX["emptyMeta"]], Interactive=True))
+        after_revision, after_bytes = snapshot_state()
+        check(replay == {"Head": head_after}, f"retained replay reply: {replay}")
+        check(after_revision == revision, f"retained replay must not advance Revision: {revision} -> {after_revision}")
+        check(after_bytes == before_bytes, "retained replay must not rewrite the snapshot")
         snapshot_map = d.map()
         d.stop(); d = Daemon(state)
         check(d.map() == snapshot_map, "typed empty metadata replay and signatures")
