@@ -138,7 +138,7 @@
     "command": "env GO=<go1.26.8> nice -n 19 sh tools/test.sh",
     "cwd": "clean consumer checkout 6e0fff2",
     "exit": 0,
-    "summary": "All suites PASS incl. quantity/security3 consumer-units (4 type refusals compile7, actual consumer0, secret modes, Q1_ADD_GUARD/Q4_MUL_GUARD/SC1_CURSOR/SC1_NOOP mutants normal exit1 at named markers) and tkad 224 real-socket assertions. NOT_RUN: ARGON2_ORACLE random corpus, CBOR_GO regeneration; SKIP foreign-UID chown (non-root)."
+    "summary": "All suites PASS incl. quantity/security3 consumer-units (4 type refusals compile7, actual consumer0, secret modes, Q1_ADD_GUARD/Q4_MUL_GUARD/SC1_CURSOR/SC1_NOOP mutants normal exit1 at named markers) and tkad 224 real-socket assertions. SKIP foreign-UID chown (non-root). Oracle-enabled reruns below supersede the initial NOT_RUN for Argon2 random corpus and CBOR regeneration."
   },
   "matched_measurement": {
     "method": "Same compiler/fixture/request bytes; 10 warmups + two 100-request batches per route over fresh serial connections; nearest-rank; baseline then candidate on shared host, not randomized",
@@ -218,5 +218,23 @@
       "candidate": 23516
     },
     "interpretation": "Replay speedup is removal of unnecessary snapshot rewrite on canonical no-op, not new-append throughput. No SLA, timing-secrecy or aggregate resource claim."
+  },
+  "oracle_reruns": {
+    "consumer_commit": "75e3565",
+    "go": "go1.26.8 linux/arm64",
+    "argon2": {
+      "oracle_build": "go build -trimpath in om/argon2/test/gen/oracle (golang.org/x/crypto v0.54.0)",
+      "oracle_sha256": "f98c33d7f54de8cbfd003e6b9a6b32e8aac13898bdd34cda11adf2039bdc1617",
+      "command": "ARGON2_ORACLE=<oracle> sh om/argon2/test/run.sh <omc>",
+      "seed": 9106,
+      "result": "random 200/200 PASS; all other argon2 checks PASS",
+      "exit": 0
+    },
+    "cbor": {
+      "command": "CBOR_GO=<go1.26.8> sh om/cbor/test/run.sh <omc>",
+      "result": "oracle regeneration identical PASS; all other cbor checks PASS",
+      "exit": 0
+    },
+    "still_skipped": "store foreign-UID chown fixtures (needs root)"
   }
 }

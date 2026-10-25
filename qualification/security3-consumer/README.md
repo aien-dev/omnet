@@ -100,8 +100,10 @@ policy approval, remote authentication, complete native secrecy or deployment ap
 
 - `tools/test.sh` exit0: all library suites, `--consumer-units` (type refusals
   compile7, four production mutants normal exit1 at named markers) and224 real
-  socket assertions. NOT_RUN: random Argon2 oracle corpus, CBOR oracle
-  regeneration. SKIP: foreign-UID chown fixtures (non-root runner).
+  socket assertions. The first run lacked oracles; reruns with them enabled passed:
+  Argon2 random corpus 200/200 against the Go x/crypto v0.54.0 referee, and CBOR
+  oracle regeneration identical to the committed vectors (`oracle_reruns`).
+  SKIP: foreign-UID chown fixtures (need root).
 - Default socket mode from the base checkout against the candidate: exit0,
   including restart, short-write, ENOSPC, post-rename uncertainty (74), wrong-count
   control (41/202) and checksum-valid support-secret omission (41/243).
