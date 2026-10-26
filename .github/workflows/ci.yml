@@ -1,0 +1,42 @@
+# CI for omnet: builds the pinned seed-born Omega compiler (omega.pin) and runs every unit
+# suite through tools/test.sh on a GitHub-hosted arm64 runner. Go is installed only for the
+# differential oracles (om/json, cmd/tka); oracles never ship. A second job writes an SPDX
+# SBOM of the tree so auditors can diff what the repository contains at a given commit.
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.8'
+          cache: false
+      - name: Toolchain record
+        run: |
+          cat omega.pin
+          go version
+          python3 --version
+      - name: Build the pinned omc and run every suite
+        run: sh tools/test.sh
+  sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: sbom-${{ github.sha }}.spdx.json
