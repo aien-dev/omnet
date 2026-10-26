@@ -1,0 +1,651 @@
+note SPDX-License-Identifier: BSD-3-Clause
+note Derived behavior: Tailscale v1.102.0 tka/{aum,key,state,tka,sync}.go.
+note Copyright (c) Tailscale Inc & contributors. See tailscale.LICENSE.
+note Model schemas: 1 AUM, 2 Key, 3 State, 4 Signature; scalar schemas 5 uint,
+note 6 uint8, 7 bytes, 8 metadata, 9 hash pointer; arrays 12 Keys, 14 signatures, 17 bytes.
+note Result lengths <=65536; errors 65537 type, 65538 capacity, 65539 static,
+note 65540 signature, 65541 parent/key/state, 65542 uninitialized/intersection.
+fn tkabool b bool to ulong
+if b
+ret 1
+end
+ret 0
+end
+
+fn tkanull t view ulong 131074 r ulong to ulong
+if eq r 65536
+ret 1
+end
+if ne cbrmaj t r 7
+ret 0
+end
+ret tkabool or eq cbrval t r 22 eq cbrval t r 23
+end
+
+fn tkaheadw o edit uchar 65536 w edit ulong 4 m ulong v ulong to void
+if ne get w 1 0
+ret
+end
+n = ulong 1
+if ge v 24
+n = 2
+end
+if gt v 255
+n = 3
+end
+if gt v 65535
+n = 5
+end
+if gt v 4294967295
+n = 9
+end
+if gt n sub 65536 get w 0
+put w 1 65538
+ret
+end
+put w 0 cbrhead o get w 0 m v
+end
+
+fn tkacopy d view uchar 65536 a ulong n ulong o edit uchar 65536 w edit ulong 4 to void
+if ne get w 1 0
+ret
+end
+if gt n sub 65536 get w 0
+put w 1 65538
+ret
+end
+for i ulong n
+put o add get w 0 i get d add a i
+end
+put w 0 add get w 0 n
+end
+
+fn tkafld s ulong f ulong to ulong
+if eq s 1
+if eq f 1
+ret 6
+end
+if or eq f 2 eq f 4
+ret 7
+end
+if eq f 3
+ret 2
+end
+if eq f 5
+ret 3
+end
+if eq f 6
+ret 5
+end
+if eq f 7
+ret 8
+end
+if eq f 23
+ret 14
+end
+end
+if eq s 2
+if eq f 1
+ret 6
+end
+if eq f 2
+ret 5
+end
+if eq f 3
+ret 7
+end
+if eq f 12
+ret 8
+end
+end
+if eq s 3
+if eq f 1
+ret 9
+end
+if eq f 2
+ret 17
+end
+if eq f 3
+ret 12
+end
+if or eq f 4 eq f 5
+ret 5
+end
+end
+if eq s 4
+if or eq f 1 eq f 2
+ret 7
+end
+end
+ret 0
+end
+
+fn tkareq s ulong f ulong to ulong
+if eq s 1
+ret tkabool le f 2
+end
+if or eq s 2 eq s 3
+ret tkabool le f 3
+end
+ret tkabool eq s 4
+end
+
+fn tkafnum d view uchar 65536 t view ulong 131074 r ulong to ulong
+m = cbrmaj t r
+if eq m 0
+if lt cbrval t r 24
+ret cbrval t r
+end
+ret 0
+end
+if eq m 1
+if gt cbrval t r 9223372036854775807
+ret 65537
+end
+ret 0
+end
+if ne m 3
+ret 65537
+end
+n = cbrval t r
+p = cbrpoff t r
+if eq cbrutf8 d p n 0
+ret 65537
+end
+if eq n 1
+v = ulong get d p
+if and ge v 49 le v 57
+ret sub v 48
+end
+end
+if eq n 2
+if and eq get d p 49 eq get d add p 1 50
+ret 12
+end
+if and eq get d p 50 eq get d add p 1 51
+ret 23
+end
+end
+ret 0
+end
+
+fn tkaomit t view ulong 131074 r ulong s ulong f ulong keep ulong to ulong
+if ne tkareq s f 0
+ret 0
+end
+if ne tkanull t r 0
+ret 1
+end
+if eq keep 1
+ret 0
+end
+if and eq s 1 or eq f 3 or eq f 5 eq f 6
+ret 0
+end
+ret tkabool eq cbrval t r 0
+end
+
+note fxamacker fillPositiveInt also accepts non-Boolean/non-null CBOR simple numbers.
+fn tkauint t view ulong 131074 r ulong to bool
+if eq cbrmaj t r 0
+ret true
+end
+if eq cbrmaj t r 7
+ret or lt cbrai t r 20 eq cbrai t r 24
+end
+ret false
+end
+
+fn tkabytes d view uchar 65536 t view ulong 131074 o edit uchar 65536 w edit ulong 4 r ulong to void
+if ne tkanull t r 0
+ tkaheadw o w 7 22
+ ret
+end
+m = cbrmaj t r
+n = cbrval t r
+if eq m 2
+ tkaheadw o w 2 n
+ tkacopy d cbrpoff t r n o w
+ ret
+end
+if ne m 4
+ put w 1 65537
+ ret
+end
+tkaheadw o w 2 n
+j = add r 1
+for i ulong n
+v = ulong 0
+if eq tkanull t j 0
+if or not tkauint t j gt cbrval t j 255
+put w 1 65537
+ret
+end
+v = cbrval t j
+end
+if ge get w 0 65536
+put w 1 65538
+ret
+end
+put o get w 0 uchar v
+put w 0 add get w 0 1
+j = cbrnext t j
+end
+end
+
+fn tkameta d view uchar 65536 t view ulong 131074 o edit uchar 65536 w edit ulong 4 r ulong to void
+if ne tkanull t r 0
+ tkaheadw o w 7 22
+ ret
+end
+if ne cbrmaj t r 5
+put w 1 65537
+ret
+end
+if ne cbrdupk d t r 0
+put w 1 65537
+ret
+end
+note Normalize null strings to empty, then canonical-sort the rebuilt map.
+b = new uchar 65536 0
+z = new ulong 4 0
+tkaheadw b z 5 cbrval t r
+j = add r 1
+for i ulong mul 2 cbrval t r
+if ne tkanull t j 0
+tkaheadw b z 3 0
+else
+if ne cbrmaj t j 3
+put w 1 65537
+ret
+end
+if eq cbrutf8 d cbrpoff t j cbrval t j 0
+put w 1 65537
+ret
+end
+tkaheadw b z 3 cbrval t j
+tkacopy d cbrpoff t j cbrval t j b z
+end
+j = cbrnext t j
+end
+u = new ulong 131074 0
+if ne get z 1 0
+put w 1 get z 1
+ret
+end
+v = cbrdec b get z 0 u
+if ne cbrdupk b u 0 0
+put w 1 65537
+ret
+end
+if gt get z 0 sub 65536 get w 0
+put w 1 65538
+ret
+end
+put w 0 cbrencs b u 0 o get w 0
+end
+
+fn tkafixed d view uchar 65536 t view ulong 131074 o edit uchar 65536 w edit ulong 4 r ulong to void
+if ne tkanull t r 0
+tkaheadw o w 7 22
+ret
+end
+m = cbrmaj t r
+if and ne m 2 ne m 4
+put w 1 65537
+ret
+end
+tkaheadw o w 2 32
+if or ne get w 1 0 gt get w 0 65504
+put w 1 65538
+ret
+end
+j = add r 1
+for i ulong 32
+v = ulong 0
+if lt i cbrval t r
+if eq m 2
+v = ulong get d add cbrpoff t r i
+else
+if eq tkanull t j 0
+if or not tkauint t j gt cbrval t j 255
+put w 1 65537
+ret
+end
+v = cbrval t j
+end
+j = cbrnext t j
+end
+end
+put o get w 0 uchar v
+put w 0 add get w 0 1
+end
+end
+
+fn tkaval d view uchar 65536 t view ulong 131074 o edit uchar 65536 w edit ulong 4 r ulong s ulong to void
+if ge s 10
+if ne tkanull t r 0
+tkaheadw o w 7 22
+ret
+end
+if ne cbrmaj t r 4
+put w 1 65537
+ret
+end
+tkaheadw o w 4 cbrval t r
+j = add r 1
+for i ulong cbrval t r
+tkaval d t o w j sub s 10
+j = cbrnext t j
+end
+ret
+end
+if eq s 7
+tkabytes d t o w r
+ret
+end
+if eq s 8
+tkameta d t o w r
+ret
+end
+if or eq s 5 eq s 6
+v = ulong 0
+if eq tkanull t r 0
+if not tkauint t r
+put w 1 65537
+ret
+end
+v = cbrval t r
+end
+if and eq s 6 gt v 255
+put w 1 65537
+ret
+end
+tkaheadw o w 0 v
+ret
+end
+note AUMHash is a fixed Go array: short values pad, long values truncate.
+if eq s 9
+tkafixed d t o w r
+ret
+end
+note Null into a struct leaves its zero value, pointers are filtered by their owning field.
+a = new ulong 24 65536
+if eq tkanull t r 0
+if ne cbrmaj t r 5
+put w 1 65537
+ret
+end
+if ne cbrdupk d t r 0
+put w 1 65537
+ret
+end
+j = add r 1
+for i ulong cbrval t r
+f = tkafnum d t j
+if ge f 65537
+put w 1 f
+ret
+end
+v = cbrnext t j
+if ne tkafld s f 0
+if ne get a f 65536
+put w 1 65537
+ret
+end
+put a f v
+end
+j = cbrnext t v
+end
+end
+n = ulong 0
+for f ulong 24
+if ne tkafld s f 0
+if eq tkaomit t get a f s f get w 2 0
+n = add n 1
+end
+end
+end
+tkaheadw o w 5 n
+for f ulong 24
+if ne tkafld s f 0
+if eq tkaomit t get a f s f get w 2 0
+tkaheadw o w 0 f
+tkaval d t o w get a f tkafld s f
+end
+end
+end
+end
+
+fn tkadecode d view uchar 65536 n ulong s ulong o edit uchar 65536 keep ulong to ulong
+t = new ulong 131074 0
+if ne cbrdec d n t 0
+ret 65537
+end
+w = new ulong 4 0
+put w 2 keep
+tkaval d t o w 0 s
+if ne get w 1 0
+ret get w 1
+end
+ret get w 0
+end
+
+fn tkamodel d view uchar 65536 n ulong s ulong o edit uchar 65536 keep ulong to ulong
+if or gt n 65536 or lt s 1 gt s 4
+ret 65538
+end
+b = new uchar 65536 0
+c = new uchar 65536 0
+z = tkadecode d n s b 1
+if gt z 65536
+ret z
+end
+if eq keep 0
+z = tkadecode b z s c 0
+if gt z 65536
+ret z
+end
+for i ulong z
+put o i get c i
+end
+else
+for i ulong z
+put o i get b i
+end
+end
+ret z
+end
+
+fn tkadec d view uchar 65536 n ulong o edit uchar 65536 to ulong
+ret tkamodel d n 1 o 0
+end
+
+fn tkahash d view uchar 65536 n ulong sig ulong o edit uchar 32 to ulong
+b = new uchar 65536 0
+z = tkadec d n b
+if gt z 65536
+ret z
+end
+t = new ulong 131074 0
+if ne sig 0
+x = cbrdec b z t
+r = cbrmfind t 0 23
+if ne r 0
+note Signature field 23 is last in the canonical map.
+z = cbrhoff t sub r 1
+put b 0 uchar sub ulong get b 0 1
+end
+end
+k = new uchar 32 0
+b2shash b z k 0 32 o
+ret 0
+end
+
+fn tkapres t view ulong 131074 r ulong f ulong to ulong
+v = cbrmfind t r f
+if eq v 0
+ret 0
+end
+ret tkabool eq tkanull t v 0
+end
+
+fn tkalen t view ulong 131074 r ulong f ulong to ulong
+v = cbrmfind t r f
+if eq v 0
+ret 0
+end
+if ne tkanull t v 0
+ret 0
+end
+ret cbrval t v
+end
+
+fn tkablen t view ulong 131074 r ulong to ulong
+if ne tkanull t r 0
+ret 0
+end
+ret cbrval t r
+end
+
+fn tkaeq d view uchar 65536 t view ulong 131074 a ulong b ulong to ulong
+if ne tkablen t a tkablen t b
+ret 0
+end
+for i ulong tkablen t a
+if ne get d add cbrpoff t a i get d add cbrpoff t b i
+ret 0
+end
+end
+ret 1
+end
+
+fn tkakvalid d view uchar 65536 t view ulong 131074 r ulong to ulong
+if ne tkalen t r 1 1
+ret 65539
+end
+v = tkalen t r 2
+if or eq v 0 gt v 4096
+ret 65539
+end
+m = cbrmfind t r 12
+if ne m 0
+j = add m 1
+n = ulong 0
+for i ulong mul 2 cbrval t m
+n = add n cbrval t j
+j = cbrnext t j
+end
+if gt n 512
+ret 65539
+end
+end
+ret 0
+end
+
+fn tkasvalid d view uchar 65536 t view ulong 131074 r ulong to ulong
+if ne tkapres t r 1 0
+ret 65539
+end
+n = tkalen t r 2
+if or eq n 0 gt n 32
+ret 65539
+end
+a = cbrmfind t r 2
+j = add a 1
+for i ulong n
+if ne cbrval t j 32
+ret 65539
+end
+k = add a 1
+for h ulong i
+if ne tkaeq d t j k 0
+ret 65539
+end
+k = cbrnext t k
+end
+j = cbrnext t j
+end
+n = tkalen t r 3
+if or eq n 0 gt n 512
+ret 65539
+end
+a = cbrmfind t r 3
+j = add a 1
+for i ulong n
+if ne tkakvalid d t j 0
+ret 65539
+end
+k = add a 1
+for h ulong i
+if ne tkaeq d t cbrmfind t j 3 cbrmfind t k 3 0
+ret 65539
+end
+k = cbrnext t k
+end
+j = cbrnext t j
+end
+ret 0
+end
+
+fn tkavalid d view uchar 65536 n ulong to ulong
+b = new uchar 65536 0
+z = tkamodel d n 1 b 1
+if gt z 65536
+ret z
+end
+t = new ulong 131074 0
+v = cbrdec b z t
+if and ne tkapres t 0 2 0 eq tkalen t 0 2 0
+ret 65539
+end
+r = cbrmfind t 0 3
+if ne r 0
+if ne tkakvalid b t r 0
+ret 65539
+end
+end
+r = cbrmfind t 0 5
+if ne r 0
+if ne tkasvalid b t r 0
+ret 65539
+end
+end
+r = cbrmfind t 0 23
+if ne r 0
+j = add r 1
+for i ulong cbrval t r
+if or ne tkalen t j 1 32 ne tkalen t j 2 64
+ret 65539
+end
+j = cbrnext t j
+end
+end
+k = tkalen t 0 1
+mask = ulong 0
+for f ulong 5
+if ne tkapres t 0 add f 3 0
+mask = or mask shl ulong 1 f
+end
+end
+if and eq k 1 ne mask 1
+ret 65539
+end
+if eq k 2
+if or ne mask 2 eq tkalen t 0 4 0
+ret 65539
+end
+end
+if eq k 4
+if or ne and mask 7 2 eq and mask 24 0
+ret 65539
+end
+if eq tkalen t 0 4 0
+ret 65539
+end
+end
+if and eq k 5 ne mask 4
+ret 65539
+end
+ret 0
+end

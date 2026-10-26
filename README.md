@@ -47,8 +47,9 @@ denial-of-service bug.
 1. **Bounded input.** Every read has an explicit capacity, and every message has a maximum size that
    is checked before it is parsed.
 2. **No check-then-use on names.** Act on an opened descriptor, never on a path checked earlier.
-3. **Fail closed.** A parse error, signature failure, or unknown field version means reject, never
-   skip.
+3. **Fail closed.** Parse errors and signature failures reject. Compatibility behavior must match
+   the pinned protocol: unknown signed AUM kinds advance the hash chain as no-ops, as Tailscale
+   specifies; they never bypass authorization.
 4. **Least privilege.** A component that parses untrusted input runs without the privileges of the
    component that acts on the result.
 5. **Two referees.** Each algorithm is checked against published test vectors and against an
@@ -67,8 +68,8 @@ denial-of-service bug.
 
 ## Build and test
 
-Requirements: Linux on ARM64 (the Omega compiler emits AArch64 Linux programs), `git`, POSIX `sh`.
-Python 3 is optional and is used only to generate differential test data.
+Requirements: Linux on ARM64 (the Omega compiler emits AArch64 Linux programs), `git`, POSIX `sh`,
+Python 3, and Go >=1.26.5 for the TKA differential oracle. Go is test-only; shipped logic is Omega.
 
 ```sh
 tools/test.sh      # builds the pinned compiler on first use, then runs every unit's tests
@@ -76,8 +77,12 @@ tools/test.sh      # builds the pinned compiler on first use, then runs every un
 
 ## Status
 
-Pre-alpha. See [`docs/design/tailnet-lock.md`](docs/design/tailnet-lock.md) for the plan and the
-current state of each part.
+Pre-alpha. Crypto and encoding units, typed TKA models, node-key signature verification, and a
+bounded in-memory authority are implemented in Omega. There is no daemon, durable authority store,
+or headscale integration yet; this code does not currently protect a tailnet.
+
+See [`docs/design/tailnet-lock.md`](docs/design/tailnet-lock.md) for the implementation limits,
+verification plan, and remaining stages.
 
 ## License
 

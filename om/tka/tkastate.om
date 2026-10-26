@@ -1,0 +1,335 @@
+note SPDX-License-Identifier: BSD-3-Clause
+note Copyright (c) Tailscale Inc & contributors. See tailscale.LICENSE.
+note Functions are separated for compiler register pressure; concatenate after tka.om.
+fn tkaxeq a view uchar 65536 t view ulong 131074 x ulong b view uchar 65536 u view ulong 131074 y ulong to ulong
+if ne tkablen t x tkablen u y
+ret 0
+end
+n = tkablen t x
+x = cbrpoff t x
+y = cbrpoff u y
+for i ulong n
+v = get a add x i
+if ne v get b add y i
+ret 0
+end
+end
+ret 1
+end
+
+fn tkakey a view uchar 65536 t view ulong 131074 id ulong s view uchar 65536 u view ulong 131074 to ulong
+r = cbrmfind u 0 3
+j = add r 1
+for i ulong tkalen u 0 3
+if ne tkaxeq a t id s u cbrmfind u j 3 0
+ret j
+end
+j = cbrnext u j
+end
+ret 0
+end
+
+fn tkasigok a view uchar 65536 t view ulong 131074 r ulong s view uchar 65536 u view ulong 131074 msg view uchar 65536 to ulong
+k = tkakey a t cbrmfind t r 1 s u
+if eq k 0
+ret 0
+end
+p = cbrmfind u k 3
+if ne cbrval u p 32
+ret 0
+end
+pk = new uchar 32 0
+sg = new uchar 64 0
+for i ulong 32
+put pk i get s add cbrpoff u p i
+end
+p = cbrmfind t r 2
+for i ulong 64
+put sg i get a add cbrpoff t p i
+end
+ret edverify pk msg 32 sg 1
+end
+
+fn tkaauth a view uchar 65536 t view ulong 131074 s view uchar 65536 u view ulong 131074 to ulong
+r = cbrmfind t 0 23
+if eq r 0
+ret 65540
+end
+if eq cbrval t r 0
+ret 65540
+end
+h = new uchar 32 0
+z = tkahash a cbrinlen t 1 h
+if ne z 0
+ret z
+end
+m = new uchar 65536 0
+for i ulong 32
+put m i get h i
+end
+j = add r 1
+for i ulong cbrval t r
+if eq tkasigok a t j s u m 0
+ret 65540
+end
+j = cbrnext t j
+end
+ret 0
+end
+
+fn tkaweight a view uchar 65536 t view ulong 131074 s view uchar 65536 u view ulong 131074 to ulong
+r = cbrmfind t 0 23
+if eq r 0
+ret 0
+end
+j = add r 1
+weight = ulong 0
+for i ulong cbrval t r
+seen = ulong 0
+k = add r 1
+for h ulong i
+if ne tkaeq a t cbrmfind t j 1 cbrmfind t k 1 0
+seen = 1
+end
+k = cbrnext t k
+end
+if eq seen 0
+k = tkakey a t cbrmfind t j 1 s u
+if ne k 0
+weight = add weight tkalen u k 2
+end
+end
+j = cbrnext t j
+end
+ret weight
+end
+
+fn tkaraw d view uchar 65536 t view ulong 131074 r ulong o edit uchar 65536 w edit ulong 4 to void
+tkacopy d cbrhoff t r cbrspan t r o w
+end
+
+fn tkaupkey a view uchar 65536 t view ulong 131074 s view uchar 65536 u view ulong 131074 r ulong o edit uchar 65536 to ulong
+w = new ulong 4 0
+m = cbrmfind t 0 7
+if eq m 0
+m = cbrmfind u r 12
+end
+n = ulong 3
+if ne m 0
+n = 4
+end
+tkaheadw o w 5 n
+for f ulong 3
+tkaheadw o w 0 add f 1
+if and eq f 1 ne cbrmfind t 0 6 0
+tkaraw a t cbrmfind t 0 6 o w
+else
+tkaraw s u cbrmfind u r add f 1 o w
+end
+end
+if ne m 0
+tkaheadw o w 0 12
+if ne cbrmfind t 0 7 0
+tkaraw a t m o w
+else
+tkaraw s u m o w
+end
+end
+if ne get w 1 0
+ret get w 1
+end
+ret get w 0
+end
+
+fn tkaemitup a view uchar 65536 t view ulong 131074 s view uchar 65536 u view ulong 131074 o edit uchar 65536 w edit ulong 4 to void
+b = new uchar 65536 0
+v = new ulong 131074 0
+z = tkaupkey a t s u get w 3 b
+if gt z 65536
+put w 1 z
+ret
+end
+x = cbrdec b z v
+if ne tkakvalid b v 0 0
+put w 1 65539
+ret
+end
+tkacopy b 0 z o w
+end
+
+fn tkawkeys a view uchar 65536 t view ulong 131074 s view uchar 65536 u view ulong 131074 o edit uchar 65536 w edit ulong 4 to void
+kind = tkalen t 0 1
+r = cbrmfind u 0 3
+cnt = cbrval u r
+key = ulong 0
+if or eq kind 2 eq kind 4
+key = tkakey a t cbrmfind t 0 4 s u
+if eq key 0
+put w 1 65541
+ret
+end
+end
+if eq kind 1
+k = cbrmfind t 0 3
+if ne tkakey a t cbrmfind t k 3 s u 0
+put w 1 65541
+ret
+end
+if ge cnt 512
+put w 1 65538
+ret
+end
+cnt = add cnt 1
+end
+if eq kind 2
+if eq cnt 1
+put w 1 65541
+ret
+end
+cnt = sub cnt 1
+end
+tkaheadw o w 4 cnt
+j = add r 1
+for i ulong cbrval u r
+if ne j key
+tkaraw s u j o w
+else
+if eq kind 4
+put w 3 j
+tkaemitup a t s u o w
+end
+end
+j = cbrnext u j
+end
+if eq kind 1
+tkaraw a t cbrmfind t 0 3 o w
+end
+end
+
+fn tkawhash h view uchar 32 o edit uchar 65536 w edit ulong 4 to void
+tkaheadw o w 2 32
+if or ne get w 1 0 gt get w 0 65504
+put w 1 65538
+ret
+end
+for i ulong 32
+put o get w 0 get h i
+put w 0 add get w 0 1
+end
+end
+
+
+fn tkacp a view uchar 65536 t view ulong 131074 u view ulong 131074 o edit uchar 65536 h view uchar 32 to ulong
+w = new ulong 4 0
+r = cbrmfind t 0 5
+for f ulong 2
+if ne tkalen t r add f 4 tkalen u 0 add f 4
+ret 65541
+end
+end
+tkaheadw o w 5 cbrval t r
+j = add r 1
+for i ulong cbrval t r
+f = cbrval t j
+tkaheadw o w 0 f
+j = cbrnext t j
+if eq f 1
+tkawhash h o w
+else
+tkaraw a t j o w
+end
+j = cbrnext t j
+end
+if ne get w 1 0
+ret get w 1
+end
+ret get w 0
+end
+
+fn tkaapply a view uchar 65536 t view ulong 131074 s view uchar 65536 u view ulong 131074 o edit uchar 65536 to ulong
+w = new ulong 4 0
+h = new uchar 32 0
+z = tkahash a cbrinlen t 0 h
+if ne z 0
+ret z
+end
+if eq tkalen t 0 1 5
+ret tkacp a t u o h
+end
+tkaheadw o w 5 cbrval u 0
+j = ulong 1
+for i ulong cbrval u 0
+f = cbrval u j
+tkaheadw o w 0 f
+j = cbrnext u j
+if eq f 1
+tkawhash h o w
+else
+if eq f 3
+tkawkeys a t s u o w
+else
+tkaraw s u j o w
+end
+end
+j = cbrnext u j
+end
+if ne get w 1 0
+ret get w 1
+end
+ret get w 0
+end
+
+fn tkaparent a view uchar 65536 t view ulong 131074 s view uchar 65536 u view ulong 131074 to ulong
+p = cbrmfind t 0 2
+q = cbrmfind u 0 1
+if ne cbrval t p 32
+ret 65541
+end
+if eq tkaxeq a t p s u q 0
+ret 65541
+end
+ret 0
+end
+
+fn tkatrusted a view uchar 65536 n ulong s view uchar 65536 sn ulong o edit uchar 65536 genesis ulong to ulong
+z = tkavalid a n
+if ne z 0
+ret z
+end
+b = new uchar 65536 0
+z = tkamodel a n 1 b 1
+t = new ulong 131074 0
+z = cbrdec b z t
+u = new ulong 131074 0
+if ne cbrdec s sn u 0
+ret 65537
+end
+if eq genesis 0
+z = tkaparent b t s u
+if ne z 0
+ret z
+end
+end
+z = tkaauth b t s u
+if ne z 0
+ret z
+end
+ret tkaapply b t s u o
+end
+
+fn tkatrans a view uchar 65536 n ulong s view uchar 65536 sn ulong o edit uchar 65536 genesis ulong to ulong
+b = new uchar 65536 0
+z = tkamodel s sn 3 b 1
+if gt z 65536
+ret z
+end
+ret tkatrusted a n b z o genesis
+end
+
+fn tkaweightbuf a view uchar 65536 n ulong s view uchar 65536 sn ulong to ulong
+t = new ulong 131074 0
+u = new ulong 131074 0
+z = cbrdec a n t
+z = cbrdec s sn u
+ret tkaweight a t s u
+end

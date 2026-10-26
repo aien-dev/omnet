@@ -1,0 +1,207 @@
+note SPDX-License-Identifier: Apache-2.0
+note Binary commands: opcode, authority slot, uint32 LE payload length, payload.
+global tki uchar 65536
+global tkn ulong 2
+fn tdgetc to long
+if eq get tkn 0 get tkn 1
+r = read 0 tki 0 65536
+if le r 0
+ret -1
+end
+put tkn 0 0
+put tkn 1 ulong r
+end
+p = get tkn 0
+put tkn 0 add p 1
+ret long get tki p
+end
+fn tdhex v ulong to uchar
+if lt v 10
+ret uchar add v 48
+end
+ret uchar add v 87
+end
+fn tdout d view uchar 65536 n ulong to void
+h = new uchar 131073 0
+for i ulong n
+v = ulong get d i
+put h mul i 2 tdhex shr v 4
+put h add mul i 2 1 tdhex and v 15
+end
+put h mul n 2 10
+r = write 1 h 0 add mul n 2 1
+end
+fn tdhash h view uchar 32 to void
+b = new uchar 65536 0
+for i ulong 32
+put b i get h i
+end
+tdout b 32
+end
+fn tdstatus z ulong to void
+b = new uchar 65536 0
+put b 0 0
+if ge z 65537
+put b 0 1
+end
+tdout b 1
+end
+fn tdbatch d view uchar 65536 n ulong to ulong
+if eq n 0
+ret 65538
+end
+cnt = ulong get d 0
+spans = new ulong 256 0
+p = ulong 1
+if gt cnt 128
+ret 65538
+end
+for i ulong cnt
+if gt add p 4 n
+ret 65538
+end
+z = ulong 0
+for j ulong 4
+z = or z shl ulong get d add p j mul j 8
+end
+p = add p 4
+if gt z sub n p
+ret 65538
+end
+put spans mul i 2 p
+put spans add mul i 2 1 z
+p = add p z
+end
+ret tkainform d spans cnt
+end
+fn tdmodel d view uchar 65536 n ulong schema ulong to void
+b = new uchar 65536 0
+z = tkamodel d n schema b 0
+tdstatus z
+if gt z 65536
+ret
+end
+tdout b z
+h = new uchar 32 0
+if eq schema 1
+v = tkahash d n 0 h
+tdhash h
+v = tkahash d n 1 h
+tdhash h
+tdstatus tkavalid d n
+end
+end
+fn tdhcopy h view uchar 32 b edit uchar 65536 p ulong to void
+for i ulong 32
+put b add p i get h i
+end
+end
+
+fn tdcommand cmd ulong d view uchar 65536 n ulong to void
+h = new uchar 32 0
+b = new uchar 65536 0
+c = new uchar 65536 0
+nodes = new ulong 128 0
+keys = new uchar 16384 0
+if eq cmd 1
+tdmodel d n 1
+ret
+end
+if and ge cmd 11 le cmd 14
+tdmodel d n sub cmd 10
+ret
+end
+if eq cmd 4
+tkareset
+tdstatus 0
+ret
+end
+if or eq cmd 2 eq cmd 3
+z = ulong 0
+if eq cmd 2
+z = tkaboot d n
+else
+z = tdbatch d n
+end
+tdstatus z
+v = tkahead h
+tdhash h
+ret
+end
+if eq cmd 5
+z = tkaoffer b
+tdstatus z
+if lt z 65537
+tdout b mul z 32
+end
+ret
+end
+if eq cmd 6
+z = tkamissing d div n 32 nodes
+tdstatus z
+if lt z 65537
+for i ulong z
+tkahget get nodes i h
+tdhcopy h b mul i 32
+end
+tdout b mul z 32
+end
+ret
+end
+if eq cmd 7
+for j ulong 32
+put h j get d j
+end
+z = tkastate h b
+tdstatus z
+if lt z 65537
+v = tkamodel b z 3 c 0
+tdout c v
+end
+ret
+end
+if eq cmd 8
+z = tkakeys keys
+tdstatus z
+if lt z 65537
+for i ulong mul z 32
+put b i get keys i
+end
+tdout b mul z 32
+end
+end
+end
+fn main to int
+b = new uchar 65536 0
+while true bound 100000
+cmd = tdgetc
+if lt cmd 0
+ret 0
+end
+slot = tdgetc
+if or lt slot 0 gt slot 1
+ret 2
+end
+x = tkaselect ulong slot
+n = ulong 0
+for j ulong 4
+v = tdgetc
+if lt v 0
+ret 2
+end
+n = or n shl ulong v mul j 8
+end
+if gt n 65536
+ret 2
+end
+for j ulong n
+v = tdgetc
+if lt v 0
+ret 2
+end
+put b j uchar v
+end
+tdcommand ulong cmd b n
+end
+ret 2
+end

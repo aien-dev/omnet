@@ -1,0 +1,432 @@
+note NodeKeySignature semantics derived from Tailscale v1.102.0 tka/sig.go.
+note Copyright (c) Tailscale Inc & contributors; BSD-3-Clause; see tailscale.LICENSE.
+note All nks helpers require tables produced by successful nksdec, unchanged input.
+fn nksfield d view uchar 65536 t view ulong 131074 i ulong to ulong
+if eq cbrmaj t i 0
+v = cbrval t i
+if le v 6
+ret v
+end
+end
+if eq cbrmaj t i 3
+if eq cbrval t i 1
+v = ulong get d cbrpoff t i
+if ge v 49
+if le v 54
+ret sub v 48
+end
+end
+end
+end
+ret 0
+end
+
+note null and undefined both decode to zero values in fxamacker.
+fn nksnil t view ulong 131074 i ulong to ulong
+if eq cbrmaj t i 7
+if eq cbrai t i 22
+ret 1
+end
+if eq cbrai t i 23
+ret 1
+end
+end
+ret 0
+end
+
+note fxamacker fillPositiveInt also accepts simple values 0..19 and 32..255.
+note cbrdec has already rejected the forbidden two-byte encodings below 32.
+fn nksuint t view ulong 131074 i ulong to ulong
+if eq cbrmaj t i 0
+ret 1
+end
+if eq cbrmaj t i 7
+if le cbrai t i 19
+ret 1
+end
+if eq cbrai t i 24
+ret 1
+end
+end
+ret 0
+end
+
+fn nksbytes t view ulong 131074 i ulong to ulong
+if ne nksnil t i 0
+ret 1
+end
+if eq cbrmaj t i 2
+ret 1
+end
+if ne cbrmaj t i 4
+ret 0
+end
+j = add i 1
+while lt j cbrnext t i bound 4096
+if eq nksnil t j 0
+if eq nksuint t j 0
+ret 0
+end
+if gt cbrval t j 255
+ret 0
+end
+end
+j = cbrnext t j
+end
+ret 1
+end
+
+fn nkslen t view ulong 131074 i ulong to ulong
+if eq i 0
+ret 0
+end
+if ne nksnil t i 0
+ret 0
+end
+ret cbrval t i
+end
+
+fn nksbyte d view uchar 65536 t view ulong 131074 i ulong j ulong to uchar
+if eq cbrmaj t i 2
+ret get d add cbrpoff t i j
+end
+q = add add i 1 j
+if ne nksnil t q 0
+ret 0
+end
+ret uchar cbrval t q
+end
+
+note Decode rows: kind, pub, keyid, signature, nested flag, wrapping, reserved, reserved.
+note m[128] row count; m[129..131] serializer scratch. Byte fields are token indexes.
+fn nksmap d view uchar 65536 t view ulong 131074 r ulong m edit ulong 132 b ulong to ulong
+if ne nksnil t r 0
+ret 0
+end
+if ne cbrmaj t r 5
+ret 65537
+end
+if ne cbrdupk d t r 0
+ret 65537
+end
+seen = ulong 0
+nest = ulong 0
+k = add r 1
+while lt k cbrnext t r bound 1024
+v = cbrnext t k
+typ = cbrmaj t k
+if eq typ 3
+if eq cbrutf8 d cbrpoff t k cbrval t k 0
+ret 65537
+end
+else
+if gt typ 1
+ret 65537
+end
+if eq typ 1
+if gt cbrval t k 9223372036854775807
+ret 65537
+end
+end
+end
+f = nksfield d t k
+if ne f 0
+bit = shl ulong 1 f
+if ne and seen bit 0
+ret 65537
+end
+seen = or seen bit
+if eq f 1
+if eq nksnil t v 0
+if eq nksuint t v 0
+ret 65537
+end
+if gt cbrval t v 255
+ret 65537
+end
+put m b cbrval t v
+end
+else
+if eq f 5
+if eq nksnil t v 0
+nest = v
+put m add b 4 1
+end
+else
+if eq nksbytes t v 0
+ret 65537
+end
+put m add b sub f 1 v
+end
+end
+end
+k = cbrnext t v
+end
+ret nest
+end
+
+fn nksdec d view uchar 65536 n ulong t edit ulong 131074 m edit ulong 132 to ulong
+for i ulong 132
+put m i 0
+end
+if gt n 65536
+ret 1
+end
+if ne cbrdec d n t 0
+ret 1
+end
+r = ulong 0
+for i ulong 16
+r = nksmap d t r m mul i 8
+if eq r 65537
+ret 1
+end
+put m 128 add i 1
+if eq r 0
+ret 0
+end
+end
+ret 1
+end
+
+fn nksemit d view uchar 65536 t view ulong 131074 o edit uchar 65536 i ulong q ulong to ulong
+n = nkslen t i
+if gt add add add q n 1 cbrhw n 65536
+ret 65537
+end
+p = cbrhead o q 2 n
+for j ulong n
+put o add p j nksbyte d t i j
+end
+ret add p n
+end
+
+note Recursive only across at most sixteen already validated rows; no recursive arrays.
+fn nksrow d view uchar 65536 t view ulong 131074 m edit ulong 132 o edit uchar 65536 r ulong to ulong
+b = mul r 8
+cnt = ulong 1
+for f ulong 5
+if ne f 3
+if gt nkslen t get m add b add f 1 0
+if eq f 2
+if ne r get m 130
+cnt = add cnt 1
+end
+else
+cnt = add cnt 1
+end
+end
+end
+end
+if ne get m add b 4 0
+cnt = add cnt 1
+end
+q = get m 129
+if gt add add q 3 cbrhw get m b 65536
+ret 1
+end
+q = cbrhead o q 5 cnt
+q = cbrhead o q 0 1
+q = cbrhead o q 0 get m b
+for f ulong 5
+key = add f 2
+if eq key 5
+if ne get m add b 4 0
+if ge q 65536
+ret 1
+end
+q = cbrhead o q 0 key
+put m 129 q
+if ne nksrow d t m o add r 1 0
+ret 1
+end
+q = get m 129
+end
+else
+i = get m add b sub key 1
+if gt nkslen t i 0
+if eq key 4
+if eq r get m 130
+i = ulong 0
+end
+end
+if ne i 0
+if ge q 65536
+ret 1
+end
+q = cbrhead o q 0 key
+q = nksemit d t o i q
+if gt q 65536
+ret 1
+end
+end
+end
+end
+end
+put m 129 q
+ret 0
+end
+
+note Canonical subtree serialization, omit=1 removes only that subtree root's Signature.
+fn nksser d view uchar 65536 t view ulong 131074 m edit ulong 132 o edit uchar 65536 r ulong omit ulong to ulong
+if ge r get m 128
+ret 65537
+end
+put m 129 0
+put m 130 65537
+if ne omit 0
+put m 130 r
+end
+if ne nksrow d t m o r 0
+ret 65537
+end
+ret get m 129
+end
+
+fn nkshash d view uchar 65536 t view ulong 131074 m edit ulong 132 r ulong h edit uchar 32 to ulong
+o = new uchar 65536 0
+z = new uchar 32 0
+n = nksser d t m o r 1
+if gt n 65536
+ret 0
+end
+b2shash o n z 0 32 h
+ret 1
+end
+
+fn nksnode d view uchar 65536 t view ulong 131074 i ulong to ulong
+if ne nkslen t i 34
+ret 0
+end
+if ne nksbyte d t i 0 110
+ret 0
+end
+if ne nksbyte d t i 1 112
+ret 0
+end
+ret 1
+end
+
+fn nkscheck d view uchar 65536 t view ulong 131074 m edit ulong 132 r ulong pk view uchar 32 mode ulong to ulong
+b = mul r 8
+s = get m add b 3
+if ne nkslen t s 64
+ret 0
+end
+sg = new uchar 64 0
+h = new uchar 32 0
+msg = new uchar 65536 0
+if eq nkshash d t m r h 0
+ret 0
+end
+for j ulong 64
+put sg j nksbyte d t s j
+end
+for j ulong 32
+put msg j get h j
+end
+ret edverify pk msg 32 sg mode
+end
+
+fn nkswrap d view uchar 65536 t view ulong 131074 m view ulong 132 r ulong pk edit uchar 32 to ulong
+w = ulong 0
+s = add r 1
+while lt s get m 128 bound 16
+w = get m add mul s 8 5
+if gt nkslen t w 0
+break
+end
+if ne get m mul s 8 2
+break
+end
+s = add s 1
+end
+if ne nkslen t w 32
+ret 0
+end
+for j ulong 32
+put pk j nksbyte d t w j
+end
+ret 1
+end
+
+fn nkskey d view uchar 65536 t view ulong 131074 id ulong keys view uchar 16384 count ulong pk edit uchar 32 to ulong
+if ne nkslen t id 32
+ret 0
+end
+for k ulong count
+same = ulong 1
+for j ulong 32
+v = get keys add mul k 32 j
+put pk j v
+if ne v nksbyte d t id j
+same = ulong 0
+end
+end
+if ne same 0
+ret 1
+end
+end
+ret 0
+end
+
+note Independent authority API: raw node key and packed trusted Key25519 public keys.
+fn nksauth d view uchar 65536 t view ulong 131074 m edit ulong 132 node view uchar 32 keys view uchar 16384 count ulong to ulong
+if gt count 512
+ret 0
+end
+if eq get m 0 3
+ret 0
+end
+if eq nksnode d t get m 1 0
+ret 0
+end
+for j ulong 32
+if ne nksbyte d t get m 1 add j 2 get node j
+ret 0
+end
+end
+pk = new uchar 32 0
+for r ulong get m 128
+b = mul r 8
+if gt r 0
+if gt nkslen t get m add b 1 0
+if eq nksnode d t get m add b 1 0
+ret 0
+end
+end
+end
+kind = get m b
+if eq kind 2
+if eq get m add b 4 0
+ret 0
+end
+if eq nkswrap d t m r pk 0
+ret 0
+end
+if eq nkscheck d t m r pk 0 0
+ret 0
+end
+if ne get m add b 8 3
+if eq nksnode d t get m add b 9 0
+ret 0
+end
+end
+else
+if ne kind 1
+if ne kind 3
+ret 0
+end
+end
+if ne get m add b 4 0
+ret 0
+end
+id = get m add b 2
+if eq nkskey d t id keys count pk 0
+ret 0
+end
+ret nkscheck d t m r pk 1
+end
+end
+ret 0
+end

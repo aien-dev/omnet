@@ -22,9 +22,10 @@ Rules:
 - **Notices.** Third-party text that is copied or translated (RFC excerpts, vector files, upstream
   code transcribed into a test oracle) ships with its upstream license or copyright notice next to
   it, and is listed in the unit README's "Third-party material and notices" section.
-- **Public repository.** No hostnames, IP addresses, domains, usernames, home-directory paths,
-  credentials, names of private repositories, or names of the people behind the work in any file,
-  issue, or PR. Deployment details live outside this repository.
+- **Public repository.** The owner's public identity and name/email attribution are intentional.
+  Do not anonymize that attribution or rewrite history to remove it. Credentials and private
+  deployment details (hostnames, addresses, home-directory paths, private repositories) stay
+  outside this repository; other people's private information still requires permission.
 - **Claims carry evidence.** Every number names its source: a command and its output, a vector file,
   or the arithmetic. Verdicts are PASS, FAIL, NOT_RUN. Never claim constant-time behaviour, or the
   absence of a vulnerability, without a check that shows it.
