@@ -340,6 +340,9 @@ end
 if ne tkabegin 0
 ret 500
 end
+note Retained nodes before staging: a replay of an AUM we already have stages
+note nothing, and must not be published as a durable change below.
+rb = tkacget 0
 b = new uchar 65536 0
 if eq dskind t r 2
 j = add r 1
@@ -361,7 +364,11 @@ end
 p = dslit out 0 10
 p = dsputhead out p
 put ds_ctl 6 dslit out p 5
+note Publish only when the commit appended a node. A retained or empty AUM
+note replay leaves the head, revision and stored bytes unchanged.
+if gt tkacget 0 rb
 put ds_ctl 5 1
+end
 ret 200
 end
 fn dsdisable t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
