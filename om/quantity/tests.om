@@ -1,0 +1,358 @@
+note Concatenate quantity.om then tests.om. Wider signed oracle has no quantity guard.
+text tadd "FAIL Q1_ADD_GUARD\n"
+text tmul "FAIL Q4_MUL_GUARD\n"
+text tedge "FAIL Q3_Q5_Q6_Q9_EDGES\n"
+text tslc "FAIL Q7_Q9_SLICE\n"
+text texh "FAIL Q2_EXACT_ORACLE\n"
+text tpass "PASS Q1-Q9 runtime; Q2 widths1..8 pairs87380 operations262140\n"
+
+fn qsent out edit qty to void
+put out val ulong 17
+put out cap ulong 19
+end
+
+fn qcheck out view qty rc int want int value ulong cap ulong to bool
+if ne rc want
+ret bool 0
+end
+if ne get out val value
+ret bool 0
+end
+ret eq get out cap cap
+end
+
+fn testadd to bool
+out = new qty ulong 17 ulong 19
+a = new qty ulong 18446744073709551608 ulong 18446744073709551615
+b = new qty ulong 16 ulong 18446744073709551615
+if ne add get a val get b val ulong 8
+ret bool 0
+end
+rc = qadd out a b
+ret qcheck out rc int 3 ulong 17 ulong 19
+end
+
+fn testmul to bool
+out = new qty ulong 17 ulong 19
+a = new qty ulong 18446744073709551615 ulong 18446744073709551615
+b = new qty ulong 2 ulong 18446744073709551615
+rc = qmul out a b
+if not qcheck out rc int 3 ulong 17 ulong 19
+ret bool 0
+end
+put a val ulong 4294967296
+put b val ulong 4294967296
+rc = qmul out a b
+if not qcheck out rc int 3 ulong 17 ulong 19
+ret bool 0
+end
+put a val ulong 4294967297
+put b val ulong 4294967297
+rc = qmul out a b
+if not qcheck out rc int 3 ulong 17 ulong 19
+ret bool 0
+end
+put a val ulong 4294967295
+put b val ulong 4294967295
+rc = qmul out a b
+if not qcheck out rc int 0 ulong 18446744065119617025 ulong 18446744073709551615
+ret bool 0
+end
+qsent out
+put a val ulong 0
+put b val ulong 18446744073709551615
+rc = qmul out a b
+ret qcheck out rc int 0 ulong 0 ulong 18446744073709551615
+end
+
+fn edges to bool
+out = new qty ulong 17 ulong 19
+a = new qty ulong 18446744073709551615 ulong 18446744073709551615
+b = new qty ulong 0 ulong 18446744073709551615
+rc = qnext out a
+if not qcheck out rc int 3 ulong 17 ulong 19
+ret bool 0
+end
+rc = qsigned out long -1 ulong 18446744073709551615
+if not qcheck out rc int 2 ulong 17 ulong 19
+ret bool 0
+end
+rc = qword out ulong 1 ulong 0
+if not qcheck out rc int 3 ulong 17 ulong 19
+ret bool 0
+end
+rc = qmul out a b
+if not qcheck out rc int 0 ulong 0 ulong 18446744073709551615
+ret bool 0
+end
+qsent out
+rc = qadd out a b
+if not qcheck out rc int 0 ulong 18446744073709551615 ulong 18446744073709551615
+ret bool 0
+end
+qsent out
+rc = qsub out b a
+if not qcheck out rc int 3 ulong 17 ulong 19
+ret bool 0
+end
+rc = qsigned out long 9223372036854775807 ulong 18446744073709551615
+if not qcheck out rc int 0 ulong 9223372036854775807 ulong 18446744073709551615
+ret bool 0
+end
+qsent out
+put a val ulong 256
+rc = qnarrow out a ulong 255
+if not qcheck out rc int 3 ulong 17 ulong 19
+ret bool 0
+end
+put a val ulong 255
+rc = qnarrow out a ulong 255
+if not qcheck out rc int 0 ulong 255 ulong 255
+ret bool 0
+end
+qsent out
+put a cap ulong 255
+rc = qnarrow out a ulong 256
+if not qcheck out rc int 2 ulong 17 ulong 19
+ret bool 0
+end
+rc = qadd out a b
+if not qcheck out rc int 2 ulong 17 ulong 19
+ret bool 0
+end
+rc = qsub out a b
+if not qcheck out rc int 2 ulong 17 ulong 19
+ret bool 0
+end
+rc = qmul out a b
+if not qcheck out rc int 2 ulong 17 ulong 19
+ret bool 0
+end
+put a val ulong 256
+rc = qadd out a b
+if not qcheck out rc int 1 ulong 17 ulong 19
+ret bool 0
+end
+rc = qsub out b a
+if not qcheck out rc int 1 ulong 17 ulong 19
+ret bool 0
+end
+rc = qmul out a b
+if not qcheck out rc int 1 ulong 17 ulong 19
+ret bool 0
+end
+rc = qnarrow out a ulong 0
+if not qcheck out rc int 1 ulong 17 ulong 19
+ret bool 0
+end
+rc = qnext out a
+ret qcheck out rc int 1 ulong 17 ulong 19
+end
+
+fn sexpect out view qslic rc int want int to bool
+if ne rc want
+ret bool 0
+end
+if ne get out ident ulong 91
+ret bool 0
+end
+if ne get out ver ulong 92
+ret bool 0
+end
+if ne get out off ulong 93
+ret bool 0
+end
+ret eq get out count ulong 94
+end
+
+fn slices to bool
+out = new qslic ulong 91 ulong 92 ulong 93 ulong 94
+off = new qty ulong 6 ulong 8
+count = new qty ulong 3 ulong 8
+expect = new qobj ulong 5 ulong 7 ulong 8
+current = new qobj ulong 5 ulong 7 ulong 8
+rc = qtyslice out off count expect current
+if not sexpect out rc int 3
+ret bool 0
+end
+put expect ver ulong 6
+rc = qtyslice out off count expect current
+if not sexpect out rc int 4
+ret bool 0
+end
+put expect ver ulong 7
+put expect ident ulong 4
+rc = qtyslice out off count expect current
+if not sexpect out rc int 4
+ret bool 0
+end
+put expect ident ulong 5
+put expect extent ulong 7
+rc = qtyslice out off count expect current
+if not sexpect out rc int 4
+ret bool 0
+end
+put expect extent ulong 8
+put off cap ulong 9
+rc = qtyslice out off count expect current
+if not sexpect out rc int 2
+ret bool 0
+end
+put count cap ulong 9
+rc = qtyslice out off count expect current
+if not sexpect out rc int 2
+ret bool 0
+end
+put off val ulong 10
+rc = qtyslice out off count expect current
+if not sexpect out rc int 1
+ret bool 0
+end
+put off val ulong 6
+put off cap ulong 8
+put count cap ulong 8
+put count val ulong 2
+rc = qtyslice out off count expect current
+if ne rc int 0
+ret bool 0
+end
+if ne get out ident ulong 5
+ret bool 0
+end
+if ne get out ver ulong 7
+ret bool 0
+end
+if ne get out off ulong 6
+ret bool 0
+end
+if ne get out count ulong 2
+ret bool 0
+end
+put off val ulong 8
+put count val ulong 0
+rc = qtyslice out off count expect current
+if ne rc int 0
+ret bool 0
+end
+if ne get out off ulong 8
+ret bool 0
+end
+if ne get out count ulong 0
+ret bool 0
+end
+put off val ulong 0
+put off cap ulong 0
+put count cap ulong 0
+put current extent ulong 0
+put expect extent ulong 0
+rc = qtyslice out off count expect current
+ret eq rc int 0
+end
+
+note Oracle uses signed 64-bit exact arithmetic only on operands0..255.
+note Its results are at most65025; it neither uses nor repeats the guarded algorithms.
+fn oracle out view qty rc int exact long cap ulong to bool
+if or lt exact long 0 gt exact long cap
+ret qcheck out rc int 3 ulong 17 ulong 19
+end
+ret qcheck out rc int 0 ulong exact cap
+end
+
+fn pairs cap ulong to bool
+out = new qty ulong 17 ulong 19
+a = new qty ulong 0 cap
+b = new qty ulong 0 cap
+rc = int 0
+for x ulong add cap ulong 1
+put a val x
+for y ulong add cap ulong 1
+put b val y
+qsent out
+rc = qadd out a b
+if not oracle out rc add long x long y cap
+ret bool 0
+end
+qsent out
+rc = qsub out a b
+if not oracle out rc sub long x long y cap
+ret bool 0
+end
+qsent out
+rc = qmul out a b
+if not oracle out rc mul long x long y cap
+ret bool 0
+end
+end
+end
+ret bool 1
+end
+
+fn unary cap ulong to bool
+out = new qty ulong 17 ulong 19
+a = new qty ulong 0 cap
+rc = int 0
+for x ulong add cap ulong 1
+qsent out
+rc = qword out x cap
+if not qcheck out rc int 0 x cap
+ret bool 0
+end
+qsent out
+rc = qsigned out long x cap
+if not qcheck out rc int 0 x cap
+ret bool 0
+end
+qsent out
+put a val x
+rc = qnext out a
+if not oracle out rc add long x long 1 cap
+ret bool 0
+end
+for y ulong add cap ulong 1
+qsent out
+rc = qnarrow out a y
+if not oracle out rc long x y
+ret bool 0
+end
+end
+end
+qsent out
+rc = qword out add cap ulong 1 cap
+ret qcheck out rc int 3 ulong 17 ulong 19
+end
+
+fn main to int
+n = long 0
+if not testadd
+n = write int 1 tadd ulong 0 len tadd
+ret int sub n sub n long 1
+end
+if not testmul
+n = write int 1 tmul ulong 0 len tmul
+ret int sub n sub n long 1
+end
+if not edges
+n = write int 1 tedge ulong 0 len tedge
+ret int sub n sub n long 1
+end
+if not slices
+n = write int 1 tslc ulong 0 len tslc
+ret int sub n sub n long 1
+end
+if not unary ulong 0
+n = write int 1 texh ulong 0 len texh
+ret int sub n sub n long 1
+end
+for w ulong 8
+if not unary sub shl ulong 1 add w ulong 1 ulong 1
+n = write int 1 texh ulong 0 len texh
+ret int sub n sub n long 1
+end
+if not pairs sub shl ulong 1 add w ulong 1 ulong 1
+n = write int 1 texh ulong 0 len texh
+ret int sub n sub n long 1
+end
+end
+n = write int 1 tpass ulong 0 len tpass
+ret int sub n n
+end

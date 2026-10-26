@@ -1,0 +1,214 @@
+note SPDX-License-Identifier: Apache-2.0
+note Native contract test for om/quantity: one result byte, 0 means every case passed,
+note otherwise the number of the first case that failed. Refusals must leave the
+note output struct unchanged, which is what the store's charging path relies on.
+fn testresult code int to int
+b = new uchar 65536 0
+put b 0 uchar code
+r = write int 1 b ulong 0 ulong 1
+ret 0
+end
+fn setq o edit qty v ulong c ulong to int
+put o val v
+put o cap c
+ret 0
+end
+fn main to int
+out = new qty ulong 17 ulong 19
+a = new qty ulong 0 ulong 0
+b = new qty ulong 0 ulong 0
+
+note 1: qword accepts an in-cap value and records value and cap.
+r0 = setq out ulong 17 ulong 19
+rc = qword out ulong 5 ulong 7
+if ne rc int 0
+ret testresult 1
+end
+if not and eq get out val ulong 5 eq get out cap ulong 7
+ret testresult 1
+end
+
+note 2: qword refuses above the cap with 3 and leaves the output unchanged.
+r0 = setq out ulong 17 ulong 19
+rc = qword out ulong 8 ulong 7
+if ne rc int 3
+ret testresult 2
+end
+if not and eq get out val ulong 17 eq get out cap ulong 19
+ret testresult 2
+end
+
+note 3: qword accepts the boundary value equal to the cap.
+rc = qword out ulong 7 ulong 7
+if ne rc int 0
+ret testresult 3
+end
+
+note 4: qsigned refuses negative ingress with 2 and leaves the output unchanged.
+r0 = setq out ulong 17 ulong 19
+rc = qsigned out long -1 ulong 7
+if ne rc int 2
+ret testresult 4
+end
+if not and eq get out val ulong 17 eq get out cap ulong 19
+ret testresult 4
+end
+
+note 5: qsigned accepts a non-negative value.
+rc = qsigned out long 5 ulong 7
+if ne rc int 0
+ret testresult 5
+end
+if not and eq get out val ulong 5 eq get out cap ulong 7
+ret testresult 5
+end
+
+note 6: qadd sums equal-cap operands that fit.
+r0 = setq a ulong 3 ulong 7
+r0 = setq b ulong 4 ulong 7
+r0 = setq out ulong 17 ulong 19
+rc = qadd out a b
+if ne rc int 0
+ret testresult 6
+end
+if not and eq get out val ulong 7 eq get out cap ulong 7
+ret testresult 6
+end
+
+note 7: qadd refuses overflow with 3 and leaves the output unchanged.
+r0 = setq a ulong 7 ulong 7
+r0 = setq b ulong 1 ulong 7
+r0 = setq out ulong 17 ulong 19
+rc = qadd out a b
+if ne rc int 3
+ret testresult 7
+end
+if not and eq get out val ulong 17 eq get out cap ulong 19
+ret testresult 7
+end
+
+note 8: qadd refuses unequal caps with 2.
+r0 = setq a ulong 3 ulong 7
+r0 = setq b ulong 1 ulong 8
+rc = qadd out a b
+if ne rc int 2
+ret testresult 8
+end
+
+note 9: qsub refuses underflow with 3 and leaves the output unchanged.
+r0 = setq a ulong 1 ulong 7
+r0 = setq b ulong 2 ulong 7
+r0 = setq out ulong 17 ulong 19
+rc = qsub out a b
+if ne rc int 3
+ret testresult 9
+end
+if not and eq get out val ulong 17 eq get out cap ulong 19
+ret testresult 9
+end
+
+note 10: qsub difference fits.
+r0 = setq a ulong 5 ulong 7
+r0 = setq b ulong 2 ulong 7
+rc = qsub out a b
+if ne rc int 0
+ret testresult 10
+end
+if not and eq get out val ulong 3 eq get out cap ulong 7
+ret testresult 10
+end
+
+note 11: qmul refuses a wrapping product with 3.
+r0 = setq a ulong 18446744073709551615 ulong 18446744073709551615
+r0 = setq b ulong 2 ulong 18446744073709551615
+rc = qmul out a b
+if ne rc int 3
+ret testresult 11
+end
+
+note 12: qmul accepts a zero operand without dividing by zero.
+r0 = setq a ulong 0 ulong 18446744073709551615
+r0 = setq b ulong 18446744073709551615 ulong 18446744073709551615
+rc = qmul out a b
+if ne rc int 0
+ret testresult 12
+end
+if ne get out val ulong 0
+ret testresult 12
+end
+
+note 13: qnarrow refuses a target cap above the source cap with 2.
+r0 = setq a ulong 5 ulong 10
+r0 = setq out ulong 17 ulong 19
+rc = qnarrow out a ulong 20
+if ne rc int 2
+ret testresult 13
+end
+
+note 14: qnarrow refuses a value that does not fit the target cap with 3.
+r0 = setq a ulong 9 ulong 10
+rc = qnarrow out a ulong 8
+if ne rc int 3
+ret testresult 14
+end
+
+note 15: qnarrow accepts a fitting value and records the narrower cap.
+r0 = setq a ulong 5 ulong 10
+rc = qnarrow out a ulong 7
+if ne rc int 0
+ret testresult 15
+end
+if not and eq get out val ulong 5 eq get out cap ulong 7
+ret testresult 15
+end
+
+note 16: qnext increments up to the cap.
+r0 = setq a ulong 6 ulong 7
+rc = qnext out a
+if ne rc int 0
+ret testresult 16
+end
+if not and eq get out val ulong 7 eq get out cap ulong 7
+ret testresult 16
+end
+
+note 17: qnext refuses at exhaustion with 3 and leaves the output unchanged.
+r0 = setq out ulong 17 ulong 19
+r0 = setq a ulong 7 ulong 7
+rc = qnext out a
+if ne rc int 3
+ret testresult 17
+end
+if not and eq get out val ulong 17 eq get out cap ulong 19
+ret testresult 17
+end
+
+note 18: qvalid refuses a value above its cap with 1.
+r0 = setq a ulong 8 ulong 7
+rc = qvalid a
+if ne rc int 1
+ret testresult 18
+end
+
+note 19: qpair refuses unequal caps with 2.
+r0 = setq a ulong 1 ulong 7
+r0 = setq b ulong 1 ulong 8
+rc = qpair a b
+if ne rc int 2
+ret testresult 19
+end
+
+note 20: the store's frame cap refuses one byte more than the 65536 buffer.
+rc = qword out ulong 65537 ulong 65536
+if ne rc int 3
+ret testresult 20
+end
+
+note 21: the store's byte cap admits exactly 33554432.
+rc = qword out ulong 33554432 ulong 33554432
+if ne rc int 0
+ret testresult 21
+end
+
+ret testresult 0
+end

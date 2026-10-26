@@ -1,0 +1,94 @@
+note Concatenate quantity.om then demo.om. No parser or service is simulated.
+text db "PASS modular baseline8 checked add status3 unchanged output effects0\n"
+text dm "PASS multiply status3 narrow status3 negative status2 unchanged output\n"
+text da "PASS reused object identity changed version status4 unchanged slice\n"
+
+fn demoadd to bool
+out = new qty ulong 17 ulong 19
+a = new qty ulong 18446744073709551608 ulong 18446744073709551615
+b = new qty ulong 16 ulong 18446744073709551615
+effects = int 0
+rc = qadd out a b
+if eq rc int 0
+effects = add effects int 1
+end
+if ne effects int 0
+ret bool 0
+end
+if ne add get a val get b val ulong 8
+ret bool 0
+end
+if ne rc int 3
+ret bool 0
+end
+ret and eq get out val ulong 17 eq get out cap ulong 19
+end
+
+fn demomul to bool
+out = new qty ulong 17 ulong 19
+a = new qty ulong 18446744073709551615 ulong 18446744073709551615
+b = new qty ulong 2 ulong 18446744073709551615
+rc = qmul out a b
+if ne rc int 3
+ret bool 0
+end
+if not and eq get out val ulong 17 eq get out cap ulong 19
+ret bool 0
+end
+rc = qnarrow out a ulong 255
+if ne rc int 3
+ret bool 0
+end
+if not and eq get out val ulong 17 eq get out cap ulong 19
+ret bool 0
+end
+rc = qsigned out long -1 ulong 18446744073709551615
+if ne rc int 2
+ret bool 0
+end
+ret and eq get out val ulong 17 eq get out cap ulong 19
+end
+
+fn demoaba to bool
+out = new qslic ulong 91 ulong 92 ulong 93 ulong 94
+off = new qty ulong 0 ulong 8
+count = new qty ulong 1 ulong 8
+expect = new qobj ulong 5 ulong 7 ulong 8
+current = new qobj ulong 5 ulong 8 ulong 8
+rc = qtyslice out off count expect current
+if ne rc int 4
+ret bool 0
+end
+if ne get out ident ulong 91
+ret bool 0
+end
+if ne get out ver ulong 92
+ret bool 0
+end
+ret and eq get out off ulong 93 eq get out count ulong 94
+end
+
+fn main to int
+if not demoadd
+ret int 1
+end
+n = write int 1 db ulong 0 len db
+if ne n long len db
+ret int 2
+end
+if not demomul
+ret int 3
+end
+n = write int 1 dm ulong 0 len dm
+if ne n long len dm
+ret int 4
+end
+if not demoaba
+ret int 5
+end
+n = write int 1 da ulong 0 len da
+if ne n long len da
+ret int 6
+end
+ret int 0
+end

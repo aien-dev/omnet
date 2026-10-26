@@ -34,6 +34,59 @@ end
 ret 0
 end
 
+note Store capacity is charged as checked quantities. A record length is admitted
+note only if it fits the fixed 65536 frame buffer, and the running byte total and
+note record count are accumulated with checked addition up to their declared caps.
+note A refused charge returns its cap plus one, which no caller can accept.
+fn stbound n ulong to ulong
+q = new qty ulong 0 ulong 0
+if ne qword q n ulong 65536 int 0
+ret 65537
+end
+ret get q val
+end
+fn stcharge cur long n ulong to ulong
+note A charge below zero is not a reachable store state; refuse it rather than
+note trap on the unsigned conversion below.
+if lt cur long 0
+ret 33554433
+end
+if gt stbound n 65536
+ret 33554433
+end
+a = new qty ulong 0 ulong 0
+b = new qty ulong 0 ulong 0
+o = new qty ulong 0 ulong 0
+if ne qword a ulong cur ulong 33554432 int 0
+ret 33554433
+end
+if ne qword b n ulong 33554432 int 0
+ret 33554433
+end
+note SC1_CHARGE mutation bypasses this checked addition with a modular sum.
+if ne qadd o a b int 0
+ret 33554433
+end
+ret get o val
+end
+fn stcount cur long to ulong
+note A count below zero is not a reachable store state; refuse it rather than
+note trap on the unsigned conversion below.
+if lt cur long 0
+ret 65537
+end
+c = new qty ulong 0 ulong 0
+o = new qty ulong 0 ulong 0
+if ne qword c ulong cur ulong 65536 int 0
+ret 65537
+end
+note SC1_COUNT mutation bypasses this checked step with a modular sum.
+if ne qnext o c int 0
+ret 65537
+end
+ret get o val
+end
+
 note Reader rejects all damage including trailing data and missing terminator.
 fn stnext fd int out edit uchar 65536 to long
 if ne get stctx 11 long 0
@@ -70,10 +123,12 @@ end
 if gt n 65536
 ret -1
 end
-if gt add ulong get stctx 8 n 33554432
+nb = stcharge get stctx 8 n
+if gt nb 33554432
 ret -1
 end
-if ge get stctx 9 long 65536
+nc = stcount get stctx 9
+if gt nc 65536
 ret -1
 end
 if ne streadall fd out n 0
@@ -83,10 +138,10 @@ sthashdata out n d
 if ne steqhash h 8 d 0
 ret -1
 end
-put stctx 8 add get stctx 8 long n
-put stctx 9 add get stctx 9 long 1
+put stctx 8 long nb
+put stctx 9 long nc
 stgethash 1 p
-stchain p d n ulong get stctx 8 ulong get stctx 9 q
+stchain p d n nb nc q
 stsethash 1 q
 ret long n
 end
@@ -340,15 +395,13 @@ end
 if eq n 0
 ret 0
 end
-if gt n 65536
+nb = stcharge get stctx 6 n
+if gt nb 33554432
 put stctx 10 1
 ret 1
 end
-if gt add ulong get stctx 6 n 33554432
-put stctx 10 1
-ret 1
-end
-if ge get stctx 7 long 65536
+nc = stcount get stctx 7
+if gt nc 65536
 put stctx 10 1
 ret 1
 end
@@ -370,10 +423,10 @@ if ne stwriteall f b n 0
 put stctx 10 1
 ret 1
 end
-put stctx 6 add get stctx 6 long n
-put stctx 7 add get stctx 7 long 1
+put stctx 6 long nb
+put stctx 7 long nc
 stgethash 0 p
-stchain p d n ulong get stctx 6 ulong get stctx 7 q
+stchain p d n nb nc q
 stsethash 0 q
 ret 0
 end
