@@ -92,8 +92,8 @@ syntax state: punctuation/field sequencing is the caller's responsibility.
   canonicalization scheme. Output can exceed the input size and fail explicitly.
 
 String output matches Go `json.Marshal(string)`: standard short control escapes, lowercase `\u`
-hex, HTML escapes for `<`, `>` and `&`, and escapes for U+2028/U+2029. Invalid UTF-8 becomes
-`\ufffd`; a valid U+FFFD scalar remains literal UTF-8, matching Go. Internal helpers all have the
+hex, HTML escapes for `<`, `>` and `&`, and escapes for U+2028/U+2029. Invalid UTF-8 becomes the replacement character as raw UTF-8 bytes; a valid
+U+FFFD scalar is written the same way, matching Go. Internal helpers all have the
 `json` prefix; callers should use the APIs above.
 
 ## Focused tests
