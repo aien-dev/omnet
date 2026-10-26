@@ -1,0 +1,7 @@
+note Compile after quantity.om; expected compiler error7 at qadd scalar argument.
+fn main to int
+out = new qty ulong 0 ulong 9
+a = new qty ulong 1 ulong 9
+raw = ulong 1
+ret qadd out a raw
+end

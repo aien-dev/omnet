@@ -1,0 +1,8 @@
+note Compile after quantity.om; expected compiler error7 at scalar argument.
+fn scalar raw ulong to ulong
+ret raw
+end
+fn main to int
+a = new qty ulong 1 ulong 9
+ret int scalar a
+end

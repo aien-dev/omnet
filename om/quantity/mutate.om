@@ -1,0 +1,95 @@
+note Test-only source transformer. stdin quantity.om, argument a or m; stdout one guard removed.
+note Requires exactly one exact guard occurrence, bounded input, complete writes. Never production code.
+global src uchar 16384
+text aguard "if gt get b val sub get a cap get a val\nret int 3\nend\n"
+text mguard "if ne get a val ulong 0\nif gt get b val div get a cap get a val\nret int 3\nend\nend\n"
+
+fn match at ulong kind uchar to bool
+if eq kind uchar 97
+for i ulong len aguard
+if ne get src add at i get aguard i
+ret bool 0
+end
+end
+else
+for i ulong len mguard
+if ne get src add at i get mguard i
+ret bool 0
+end
+end
+end
+ret bool 1
+end
+
+fn emit at ulong size ulong to bool
+pos = ulong 0
+while lt pos size bound 16384
+n = write int 1 src add at pos sub size pos
+if le n long 0
+ret bool 0
+end
+pos = add pos ulong n
+end
+ret bool 1
+end
+
+fn load to long
+size = ulong 0
+while lt size len src bound 16384
+n = read int 0 src size sub len src size
+if lt n long 0
+ret long -1
+end
+if eq n long 0
+ret long size
+end
+size = add size ulong n
+end
+ret long -1
+end
+
+fn main to int
+arg = new uchar 1 uchar 0
+if ne argcnt long 2
+ret int 2
+end
+n = argread ulong 1 arg ulong 0 ulong 1
+if ne n long 1
+ret int 2
+end
+kind = get arg 0
+if and ne kind uchar 97 ne kind uchar 109
+ret int 2
+end
+n = load
+if lt n long 0
+ret int 3
+end
+size = ulong n
+width = len aguard
+if eq kind uchar 109
+width = len mguard
+end
+if lt size width
+ret int 4
+end
+hits = ulong 0
+found = ulong 0
+for i ulong add sub size width ulong 1
+if match i kind
+hits = add hits ulong 1
+found = i
+end
+end
+if ne hits ulong 1
+ret int 4
+end
+if not emit ulong 0 found
+ret int 5
+end
+found = add found width
+if not emit found sub size found
+ret int 5
+end
+ret int 0
+end

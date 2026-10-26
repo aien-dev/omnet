@@ -1,0 +1,12 @@
+note Ordinary modular crypto words remain legal. This is arithmetic compatibility not crypto qualification.
+fn main to int
+word = add ulong 18446744073709551615 ulong 1
+if ne word ulong 0
+ret int 1
+end
+word = mul ulong 18446744073709551615 ulong 2
+if ne word ulong 18446744073709551614
+ret int 2
+end
+ret int 0
+end
