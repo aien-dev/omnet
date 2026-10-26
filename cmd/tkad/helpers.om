@@ -1,6 +1,6 @@
 note SPDX-License-Identifier: Apache-2.0
 text ds_names "Version|NodeKey|GenesisAUM|Signatures|SupportDisablement|Head|Ancestors|MissingAUMs|Interactive|DisablementSecret|Signature|KeyID|NodeID|RotationPubkey|Remove|"
-text ds_text "{}|{\"NeedSignatures\":[|{\"NodeID\":|,\"NodePublic\":|,\"RotationPubkey\":|}|,|]}|{\"GenesisAUM\":|{\"DisablementSecret\":|{\"Head\":|,\"Ancestors\":[|],\"MissingAUMs\":[|{\"Signatures\":[|{\"TKAInfo\":|null|{\"Disabled\":true}|,\"Nodes\":[|,\"KeySignature\":|,\"Revision\":|{\"Error\":\"request rejected\"}|"
+text ds_text "{}|{\"NeedSignatures\":[|{\"NodeID\":|,\"NodePublic\":|,\"RotationPubkey\":|}|,|]}|{\"GenesisAUM\":|{\"DisablementSecret\":|{\"Head\":|,\"Ancestors\":[|],\"MissingAUMs\":[|{\"Signatures\":[|{\"TKAInfo\":|null|{\"Disabled\":true}|,\"Nodes\":[|,\"KeySignature\":|,\"Revision\":|{\"Error\":\"request rejected\"}|,\"StoreID\":\"|\"|"
 fn dslower c uchar to uchar
 if and ge c 65 le c 90
 ret add c 32
@@ -177,6 +177,20 @@ ret 65537
 end
 z = cdb64enc src n b
 ret jsonstr out p b z
+end
+fn dsputhex out edit uchar 65536 p ulong v ulong to ulong
+note 16 lowercase hex digits, high nibble first, for a 64-bit header word.
+q = p
+for i ulong 16
+n = and shr v mul 4 sub 15 i 15
+c = add n 48
+if gt n 9
+c = add n 87
+end
+put out q uchar c
+q = add q 1
+end
+ret q
 end
 fn dsputnode out edit uchar 65536 p ulong i ulong to ulong
 k = new uchar 32 0

@@ -156,6 +156,10 @@ end
 end
 p = dslit out p 19
 p = jsonu64 out p dsget 6
+p = dslit out p 21
+p = dsputhex out p dsget 9
+p = dsputhex out p dsget 10
+p = dslit out p 22
 p = dslit out p 17
 b = new uchar 65536 0
 for i ulong dsget 1

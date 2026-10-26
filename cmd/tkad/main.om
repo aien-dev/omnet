@@ -125,6 +125,9 @@ ret -1
 end
 if ne init 0
 dsselect 0
+if ne dsident 0
+ret -1
+end
 s = dssave
 if eq s 2
 exit 74

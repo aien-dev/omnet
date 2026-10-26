@@ -31,11 +31,18 @@ def exact(s, n):
     return out
 
 
+seen = {}
+
+
 def response(s):
     magic, status, reserved, n = struct.unpack("<4sHHI", exact(s, 12))
     assert magic == b"TKA\x01" and status == 200 and reserved == 0
     result = json.loads(exact(s, n)); s.close()
-    assert result == {"TKAInfo":None,"Revision":0,"Nodes":[]}, result
+    assert (result["TKAInfo"], result["Revision"], result["Nodes"]) == (None, 0, []), result
+    ident = result["StoreID"]
+    assert len(ident) == 32, result
+    # The epoch exec replaces the process image; the store identity must not move.
+    assert seen.setdefault("id", ident) == ident, "identity changed across the epoch boundary"
 
 
 with tempfile.TemporaryDirectory(prefix="tkad-rollover-") as name:
