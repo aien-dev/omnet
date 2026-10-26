@@ -8,7 +8,7 @@ use-after-free, and check-then-use races. omnet rewrites security-critical parts
 infrastructure in a language where the first group cannot happen silently. Its design rules target
 the rest.
 
-The first project is **Tailnet Lock for self-hosted Tailscale control servers**. Tailnet Lock (TKA)
+The first project is **Tailnet Lock for self-hosted Tailscale (Headscale) control servers**. Tailnet Lock (TKA)
 lets the devices of a tailnet, not the control server, decide which devices may join. The stock
 Tailscale client already implements the device side. The open-source control server
 [headscale](https://github.com/juanfont/headscale) does not implement the server side
