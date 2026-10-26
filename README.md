@@ -30,16 +30,31 @@ commit in [`omega.pin`](omega.pin).
 | Heap corruption, use-after-free | There is no heap allocator and no exposed pointer. Arrays have a fixed length that travels with the name. Local arrays are freed under compile-time ownership checks. |
 | Stack exhaustion | A call or local array that would overrun the fixed 8 MiB stack traps 6 before writing. |
 
+An unsized `view T *` / `edit T *` parameter is a pointer plus a count. Every index into it is checked
+at run time and the count travels with it, so the bounds rule above holds for slices as well
+([OM-2 guarantee matrix](docs/one_layer/OM2-TUTORIAL.md) lives in the Omega repository, at the pinned
+commit).
 A trap stops the program. That turns memory corruption into a crash, so a reachable trap is still a
 denial-of-service bug.
 
-**Not ruled out by the language**, and therefore handled by review and by the design rules below:
+**Bounded by the code, with a test that shows it:**
+
+- Store record sizes and running totals are charged with checked arithmetic and held under a 65536
+  record cap and a 33554432 byte cap; an over-capacity write is refused and the registry stays
+  readable (registry capacity guard test).
+- A file path is used to open a descriptor, and the work then continues on the descriptor, never on a
+  path checked earlier (design rule 2). Rename, short-write and crash paths are exercised by fault
+  tests.
+
+**Still open, and handled by review:**
 
 - Logic and protocol errors, including wrong authorization decisions.
-- Unsigned arithmetic, which wraps by definition. Cryptography relies on that, and it can still hide
-  a length bug.
-- Timing side channels. omnet code is **not** constant-time-audited.
-- Races on file-system paths (time-of-check to time-of-use).
+- Timing side channels. omnet code is **not** constant-time-audited; the secret comparison bounds how
+  many bytes are read, not how long it takes.
+- Unsigned arithmetic wraps by definition. Checked arithmetic applies only where a module uses it.
+
+**Reduced but not eliminated:**
+
 - Resource exhaustion at the service level: too many clients or too much stored state.
 
 ## Design rules for omnet code
@@ -82,7 +97,7 @@ tools/test.sh      # builds the pinned compiler on first use, then runs every un
 
 ## Status
 
-Pre-alpha. The Omega daemon implements all eight TKA RPCs, node registry/map operations, durable
+The Omega daemon implements all eight TKA RPCs, node registry/map operations, durable
 snapshots, and validated restart recovery over a private Unix socket. Its local adapter is trusted
 and must run as the same UID; the daemon does not authenticate remote Tailscale clients.
 
