@@ -92,6 +92,15 @@ def refused_start(directory, *args):
     check(p.returncode != 0 and not 100 <= p.returncode <= 114, f"startup must refuse normally, rc={p.returncode}")
 
 
+def padded(signature, size):
+    """Re-encode a valid NKS map with one ignored field, without touching its hash."""
+    raw = base64.b64decode(signature)
+    check(0xa0 <= raw[0] <= 0xb7, "fixture NKS is a small CBOR map")
+    pad = b"\x18\x63"  # unknown unsigned key 99
+    value = b"\x5a" + struct.pack(">I", size - len(raw) - len(pad) - 1 - 5)
+    return base64.b64encode(bytes([raw[0] + 1]) + raw[1:] + pad + value + b"\x00" * struct.unpack(">I", value[1:])[0]).decode()
+
+
 def enable(d):
     d.register(0)
     d.register(1)
@@ -133,11 +142,16 @@ with tempfile.TemporaryDirectory(prefix="omnet-tkad-") as top:
         d.rpc(2, d.req(Signatures={"9223372036854775808":FIX["signatures"][0],"2":FIX["signatures"][1]}), admin=True, expected=400)
         d.rpc(2, d.req(Signatures={"-0":FIX["signatures"][0],"2":FIX["signatures"][1]}), admin=True, expected=409)
         d.stop(); d = Daemon(state)
-        check(d.map()["TKAInfo"] is None, "pending recovered but invisible")
-        d.register(1)  # Any roster update invalidates pending init, even same bytes.
-        d.rpc(2, d.req(Signatures={"1":FIX["signatures"][0],"2":FIX["signatures"][1]}), admin=True, expected=409)
-        d.rpc(1, d.req(GenesisAUM=FIX["genesis"]), admin=True)
+        pending = d.map()
+        check(pending["TKAInfo"] is None, "pending recovered but invisible")
+        check(pending["Nodes"][1]["RotationPubkey"] == FIX["rotations"][1], "map exposes reconciliation rotation key")
+        d.register(1)
+        check(d.map() == pending, "exact registration retry preserves pending revision")
         d.rpc(2, d.req(Signatures={"01":FIX["signatures"][0],"+2":FIX["signatures"][1]}, SupportDisablement=FIX["secret"]), admin=True)
+        check(d.map()["TKAInfo"] == {"Head":FIX["head"]}, "pending finish survives restart and exact registration retry")
+        stable = d.map()
+        d.register(1, Signature=FIX["signatures"][1])
+        check(d.map() == stable, "accepted signature retry preserves revision")
         check(d.map()["TKAInfo"] == {"Head":FIX["head"]}, "active map info")
         boot = d.rpc(3, d.req(Head=""))
         check(boot == {"GenesisAUM":FIX["genesis"]}, "bootstrap exact omission")
@@ -148,7 +162,10 @@ with tempfile.TemporaryDirectory(prefix="omnet-tkad-") as top:
         d.rpc(5, d.req(Head=FIX["head"], **{"MiſſingAUMs": []}))
         d.rpc(5, d.req(Head=FIX["head"], MissingAUMs=[], **{"MiſſingAUMs": []}), expected=400)
         d.rpc(4, d.req(Head=FIX["head"], Ancestors=[]))
-        d.rpc(5, d.req(Head=FIX["updatedHead"], MissingAUMs=[FIX["update"]], Interactive=True))
+        stable = d.map()
+        d.rpc(5, d.req(Head=FIX["updatedHead"], MissingAUMs=[FIX["update"]], Interactive=True), expected=409)
+        check(d.map() == stable, "interactive pre-update head mismatch cannot mutate state")
+        d.rpc(5, d.req(Head=FIX["head"], MissingAUMs=[FIX["update"]], Interactive=True))
         offer = d.rpc(4, d.req(Head=FIX["head"], Ancestors=[]))
         check(offer["Head"] == FIX["updatedHead"] and offer["MissingAUMs"] == [FIX["update"]], "sync missing real AUM")
         d.rpc(5, d.req(Head=FIX["updatedHead"], MissingAUMs=["AA=="], Interactive=False), expected=400)
@@ -160,14 +177,17 @@ with tempfile.TemporaryDirectory(prefix="omnet-tkad-") as top:
         d.rpc(7, d.req(Signature=base64.b64encode(bad).decode()), expected=403)
         affected = d.rpc(8, d.req(KeyID=FIX["keyID"]))
         check(affected["Signatures"] == FIX["signatures"], "affected raw signature array")
-        d.rpc(5, d.req(Head=FIX["emptyHead"], MissingAUMs=[FIX["emptyMeta"]], Interactive=True))
+        d.rpc(5, d.req(Head=FIX["updatedHead"], MissingAUMs=[FIX["emptyMeta"]], Interactive=True))
         snapshot_map = d.map()
         d.stop(); d = Daemon(state)
         check(d.map() == snapshot_map, "typed empty metadata replay and signatures")
-        d.rpc(5, d.req(Head=FIX["removedHead"], MissingAUMs=[FIX["removal"]], Interactive=True))
+        d.rpc(5, d.req(Head=FIX["emptyHead"], MissingAUMs=[FIX["removal"]], Interactive=True))
         d.rpc(7, d.req(Signature=FIX["signatures"][2]), expected=403)
         d.stop(); d = Daemon(state)
         check(d.map()["TKAInfo"]["Head"] == FIX["removedHead"], "revoked historical signatures recover")
+        historical = d.map()
+        d.register(2, Signature=FIX["signatures"][2])
+        check(d.map() == historical, "historical accepted registration retry is nonmutating")
         d.rpc(7, d.req(Signature=FIX["goodSignatures"][2]))
         d.rpc(6, d.req(Head=FIX["removedHead"], DisablementSecret=FIX["secret"]), expected=403)
         d.rpc(6, d.req(Head=FIX["head"], DisablementSecret=FIX["secret"]), admin=True, expected=409)
@@ -203,6 +223,19 @@ with tempfile.TemporaryDirectory(prefix="omnet-tkad-") as top:
         check(len(d.map()["Nodes"]) == 2, "registry remove")
     finally:
         d.stop()
+    changed = root / "changed-roster"
+    changed.mkdir(mode=0o700)
+    d = Daemon(changed, True)
+    try:
+        d.register(0)
+        d.register(1)
+        d.rpc(1, d.req(GenesisAUM=FIX["genesis"]), admin=True)
+        pending = d.map()
+        d.rpc(9, dict(NodeID=2, NodeKey=FIX["nodes"][1], RotationPubkey=FIX["rotations"][0]), node=0, admin=True)
+        check(d.map()["Revision"] == pending["Revision"] + 1, "rotation-key change is a durable registry mutation")
+        d.rpc(2, d.req(Signatures={"1":FIX["signatures"][0],"2":FIX["signatures"][1]}), admin=True, expected=409)
+    finally:
+        d.stop()
     # Corrupt snapshot is never interpreted as an empty fresh installation.
     snap = state / "snapshot"
     data = bytearray(snap.read_bytes()); data[len(data)//2] ^= 128; snap.write_bytes(data)
@@ -211,4 +244,22 @@ with tempfile.TemporaryDirectory(prefix="omnet-tkad-") as top:
     refused_start(missing)
     insecure = root / "insecure"; insecure.mkdir(mode=0o755)
     refused_start(insecure, "--init")
+    # Ignored CBOR fields cannot pad the durable registry past the map limit.
+    bounded = root / "registry-bounds"
+    bounded.mkdir(mode=0o700)
+    d = Daemon(bounded, True)
+    try:
+        d.register(0)
+        d.register(1)
+        d.rpc(1, d.req(GenesisAUM=FIX["genesis"]), admin=True)
+        d.rpc(2, d.req(Signatures={"1":FIX["signatures"][0],"2":FIX["signatures"][1]}), admin=True)
+        d.register(2)
+        d.rpc(7, d.req(Signature=padded(FIX["signatures"][2], 30000)))
+        stored = d.map()
+        check(stored["Nodes"][2]["KeySignature"] == FIX["signatures"][2], "ignored CBOR fields are stripped before storage")
+        check(d.rpc(8, d.req(KeyID=FIX["keyID"]))["Signatures"][2] == FIX["signatures"][2], "affected-sigs serves the canonical signature")
+        d.stop(); d = Daemon(bounded)
+        check(d.map() == stored, "canonical storage survives restart")
+    finally:
+        d.stop()
     print(f"PASS tkad real socket {checks} assertions: 8 RPCs, registry/map, security, restart, disk failure, malformed framing")

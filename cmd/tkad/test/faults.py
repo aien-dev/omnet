@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """Compile test-only syscall-boundary fault variants; never production switches."""
+import base64
 import hashlib
 import json
 import pathlib
@@ -149,3 +150,58 @@ with tempfile.TemporaryDirectory(prefix="tkad-semantic-recovery-") as name:
     refused=subprocess.run([str(binary),name],capture_output=True,timeout=10)
     assert refused.returncode==73
 print("PASS tkad checksum-valid semantic corruption: NKS, genesis, support secret, reserved metadata, pending initiator rejected")
+canon_needle = """note Store the canonical form; an empty signature still clears the node.
+fn dssetcanon i ulong src view uchar 65536 n ulong auth ulong to ulong
+if eq n 0
+dssetsig i src 0 auth
+ret 0
+end
+c = new uchar 65536 0
+z = dscanon src n c
+if gt z 65536
+ret 1
+end
+dssetsig i c z auth
+ret 0
+end"""
+assert source.count(canon_needle)==1
+# Test-only: keep submitted bytes so an ignored CBOR field can reach the limit.
+raw_store=build("raw-store",canon_needle,"""note Test-only raw storage to exercise the registry capacity guard.
+fn dssetcanon i ulong src view uchar 65536 n ulong auth ulong to ulong
+dssetsig i src n auth
+ret 0
+end""")
+
+
+def padded(signature, size):
+    raw=base64.b64decode(signature)
+    assert 0xa0<=raw[0]<=0xb7
+    pad=b"\x18\x63"
+    n=size-len(raw)-len(pad)-1-5
+    assert n>0
+    return base64.b64encode(bytes([raw[0]+1])+raw[1:]+pad+b"\x5a"+struct.pack(">I",n)+bytes(n)).decode()
+
+
+with tempfile.TemporaryDirectory(prefix="tkad-registry-capacity-") as name:
+    state=pathlib.Path(name);p=start(raw_store,state,True)
+    for i in (0,1):
+        assert rpc(state,9,dict(NodeID=i+1,NodeKey=fixture["nodes"][i],RotationPubkey=fixture["rotations"][i]))[0]==200
+    common=dict(Version=131,NodeKey=fixture["nodes"][0])
+    try:
+        assert rpc(state,1,dict(common,GenesisAUM=fixture["genesis"]),1)[0]==200
+        assert rpc(state,2,dict(common,Signatures={"1":fixture["signatures"][0],"2":fixture["signatures"][1]}),1)[0]==200
+        assert rpc(state,9,dict(NodeID=3,NodeKey=fixture["nodes"][2],RotationPubkey=fixture["rotations"][2]))[0]==200
+        assert rpc(state,7,dict(Version=131,NodeKey=fixture["nodes"][2],Signature=padded(fixture["signatures"][2],30000)),3)[0]==200
+        first=rpc(state,11,{})[1]
+        assert len(first["Nodes"])==3 and first["Nodes"][2]["KeySignature"]==padded(fixture["signatures"][2],30000),first
+        # A second individually valid signature would push the registry past the
+        # map response limit; the candidate must be rejected, never committed.
+        assert rpc(state,7,dict(common,Signature=padded(fixture["signatures"][0],30000)),1)[0]==413
+        assert rpc(state,11,{})[1]==first,"rejected candidate cannot change the registry"
+    finally:p.kill();p.communicate(timeout=10)
+    p=start(raw_store,state)
+    try:
+        assert rpc(state,11,{})[1]==first,"over-capacity rejection is durable, registry still readable"
+    finally:p.kill();p.communicate(timeout=10)
+print("PASS tkad registry capacity guard: ignored CBOR padding rejected 413, registry unchanged and readable")
+

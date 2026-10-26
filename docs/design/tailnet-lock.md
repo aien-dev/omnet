@@ -1,6 +1,6 @@
 # Tailnet Lock for self-hosted control servers
 
-Status: bounded local Omega daemon, durable snapshots, JSON RPCs and TKA authority implemented. Headscale integration remains pending. See [Plan and status](#plan-and-status).
+Status: bounded Omega daemon and pinned Headscale adapter implemented; isolated stock-client control-plane lifecycle verified. Not deployed or production-qualified. See [Plan and status](#plan-and-status).
 
 ## Problem
 
@@ -164,7 +164,7 @@ that way. That is a client issue outside this project; tkad's error bodies are s
 | JSON (`om/json`) and eight RPC handlers (`cmd/tkad`) | Omega | implemented: bounded parsing, trusted adapter identity binding |
 | Snapshot storage (`om/store`) | Omega | implemented: descriptor validation, writer exclusion, atomic publication, recovery |
 | tkad service (`cmd/tkad`) | Omega | implemented: private Unix socket, registry/map commands, controlled self-exec |
-| headscale glue | Go (fork) | planned |
+| headscale glue | Go (pinned patch) | implemented and exercised with unmodified Tailscale v1.102.0 |
 
 ## Verification plan
 
@@ -219,14 +219,108 @@ The compiler pin was unchanged. New results:
 These checks do not establish filesystem power-loss durability, cross-namespace writer exclusion,
 stock-client compatibility beyond the tested profile, or production deployment security.
 
-## Plan and status
+### Stage-five verification
 
+Headscale v0.29.6 (`a2b1d7863926834e94479dcdd91ab344a9356bd0`) plus the committed
+adapter patch passed the isolated stock Tailscale v1.102.0 lifecycle:
+
+- Initialize and sign the initial roster; filter a newly registered unsigned peer.
+- Sign that peer and propagate signature-only updates.
+- Rotate its node key through real interactive Headscale authentication; reject signing
+  the retired key. The pending rotation does not change the committed identity.
+- Remove its signing authority, observe peer rejection, and re-sign under the surviving
+  authority. Both peer and self signatures must refresh without unrelated metadata changes.
+- Restart daemon, controller and clients; retain authority, signatures and removed-key state.
+- Reject a non-owner disable request even with a valid secret.
+- Stop the isolated daemon; reject signing, disablement and fresh registration without
+  disabling protection. Restart it; rejected mutations remain unapplied.
+- Disable and restart every component; unsigned peers become visible and disablement persists.
+
+The run reported 13 PASS records including the artifact-provenance check. It uses a fresh
+network/PID namespace, loopback and a dummy link with no egress. On the verification host,
+unprivileged user namespaces were denied; the explicit `--sudo-netns` launcher creates
+the namespace and drops UID/GID privileges before running any daemon. No live services,
+interfaces, tailnet state or SSH configuration are used.
+
+All twelve Omega suites passed; the later interactive-sync correction passed the daemon suite
+with 279 socket assertions plus failure/recovery checks. The correction checks interactive
+Head against pre-update state, matching stock `TailnetLockModify`.
+Headscale control/state/mapper/types suites and SQLite migration tests passed after review
+fixes. The final self-signature propagation fix additionally passed upstream self-deduplication
+regressions and the full stock-client lifecycle. Rebuilding the final patch from a fresh clone
+produced the identical controller SHA-256:
+`7e6eeb414dc6fd439425b56c4672e2898f71b667b6528f36a75154d3ce27b138`.
+
+The adapter keeps rejected registration signatures from poisoning unrelated nodes, retains
+upstream interactive authentication, rejects duplicate/zero identities before persistence,
+and freezes coherent map frames before releasing its publication lock for network writes.
+Omega remains the only accepted-signature and authority implementation. The local adapter
+still shares the daemon UID. Its durable revision floor is not authenticated rollback protection.
+These checks prove control-plane behavior, not packet delivery, power-loss durability,
+constant-time cryptography, or production security.
+
+### Stage-six readiness review
+
+Two independent read-only source reviews covered recovery/deployment hazards and the admission
+boundary. Both found defects rather than only limitations, and each was fixed and regression
+tested:
+
+- **Registry readability.** A verified node-key signature was stored as submitted, and typed
+  decoding ignores unknown CBOR fields, so an ordinary registered client could keep padding
+  accepted signatures until the registry no longer fit the 64-KiB map response. Reconciliation
+  then failed for every request and the daemon could not be repaired through normal RPCs.
+  Accepted signatures are now stored in canonical typed form, and any candidate whose registry
+  snapshot would not fit the map response is rejected with 413 before it is persisted. The new
+  suite covers a 30,000-byte padded signature being accepted and stored canonically, surviving
+  restart, and a test-only raw-storage variant proving that an over-limit second signature is
+  refused while the registry stays readable.
+- **Unauthenticated admission.** TKA RPCs and map polls took the global publication mutex and
+  performed SQL plus daemon reconciliation before the caller's identity was checked, so an
+  arbitrary Noise client could queue on the barrier. A TKA RPC now resolves the caller against
+  committed SQL first and returns 401 without touching the daemon, and registration and map
+  admission take a bounded slot and answer 503 instead of queueing.
+- **Silent downgrade.** Unsetting both adapter variables after activation used to start stock
+  behaviour and publish maps with nil `TKAInfo`. Startup now refuses when the database already
+  records adapter state.
+
+The remaining findings were deployment limitations, not defects: one committed node without an
+NLKey blocks publication for the whole tailnet, SQLite cannot be downgraded in place, the
+revision floor is not authenticated rollback protection, and disablement is permanent for that
+database. They are recorded as gates in
+[`integration/headscale/README.md`](../../integration/headscale/README.md).
+
+Re-verification after these changes, on the pinned compiler
+`734f0a39319fbfa930bcc62cb30dbf06d47d78e126372b74f5baf478e6126b61`:
+
+- All twelve Omega suites passed (`tools/test.sh`, exit 0). The daemon suite reported 310
+  socket assertions and the new failure/recovery checks, including the registry capacity guard,
+  and the JSON differential remained 7,706/7,706. That differential now pins its oracle
+  toolchain in `om/json/test/run.py`: Go 1.27 changes `encoding/json` UTF-8 escaping, so an
+  unpinned oracle fails on byte comparison.
+- Focused adapter regressions, the complete control/state/mapper/types suites and SQLite
+  migration tests passed, including three new tests: unregistered identity refuses before
+  authority work, saturated admission fails fast, and adapter state without settings refuses
+  startup. The deleted-identity test now drives orphan removal through the watcher instead of
+  relying on an unauthorized request.
+- The isolated stock-client lifecycle passed all 13 records again with the rebuilt binaries.
+- The committed patch applied to a fresh clone of the pinned tag and rebuilt to a byte-identical
+  controller: SHA-256 `71ffcb5e6aed6bd6b2ec441b718220e2ad1d70d3fa767c728d104447f8668807`
+  (supersedes the stage-five hash, which predates these fixes).
+
+These are host and isolated-namespace results. They do not establish packet delivery, power-loss
+durability, constant-time cryptography, or production security, and no deployment is approved.
+
+## Plan and status
 1. Crypto primitives: BLAKE2s, SHA-512, Ed25519. **Done.**
 2. BLAKE2b, Argon2i, codecs, CBOR. **Done.**
 3. TKA model and bounded in-memory chain logic, differential against `tka`. **Implemented.**
    Cross-unit smoke checks node authorization before and after a signed authority-key removal.
 4. tkad service, storage, JSON. **Implemented for the bounded same-UID local-adapter profile.**
    See [`cmd/tkad/README.md`](../../cmd/tkad/README.md) for invocation, framing, limits and tests.
-5. headscale glue and end-to-end tests with stock clients.
-6. Review by a second implementer before any production use. Until then this is pre-alpha and does
-   not protect a tailnet.
+5. Headscale glue and end-to-end tests with stock clients. **Implemented and verified in isolation.**
+   See [`integration/headscale/README.md`](../../integration/headscale/README.md) for reproduction.
+6. Independent readiness review and deployment planning. **Done for source review and
+   rehearsal planning.** Two reviews found three defects, fixed and regression tested in
+   [Stage six](#stage-six-readiness-review). Deployment gates and the paired-restore
+   procedure are in [`integration/headscale/README.md`](../../integration/headscale/README.md).
+   This is not a production audit, and no live deployment is approved.

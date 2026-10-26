@@ -77,34 +77,43 @@ nonempty signatures require an active authority and valid authorization. A key
 change clears the old signature. Omitting Signature preserves it only when the
 key is unchanged. Unsigned nodes may be registered and signed later; this does
 not itself authorize them to peers. Remove takes `{NodeID}`. Map/list takes `{}`
-and returns `{TKAInfo,Revision,Nodes:[{NodeID,NodePublic,KeySignature}]}`. Inactive
-and pending authority produce `TKAInfo:null`; active produces `{Head}`; disabled
+and returns `{TKAInfo,Revision,Nodes:[{NodeID,NodePublic,RotationPubkey,KeySignature}]}`.
+`RotationPubkey` is the stored32byte base64 public key, exposed for adapter reconciliation.
+Inactive and pending authority produce `TKAInfo:null`; active produces `{Head}`; disabled
 produces `{Disabled:true}`. Unsigned nodes have `KeySignature:null`.
-Revision advances after each durable mutation. A future adapter must propagate
-these full values to initial/delta map responses and arrange notifications.
-No notification transport or Headscale integration is claimed here.
+Revision advances after each durable mutation. An exact registry upsert retry (same ID,
+node key, rotation key and omitted or identical signature) is nonmutating: it preserves the
+revision and pending initialization, including after restart. This also permits replay of an
+already accepted historical signature without reauthorizing it under a later authority.
+Adapters must propagate these full values to initial/delta map responses and arrange notifications.
 
 ## State transitions and durable publication
 
 Initialization binds a signed pending genesis to the initiating NodeID and the
-frozen registry. Every registry update invalidates pending initialization. Finish
-requires exactly one valid direct signature for every frozen node, including its
-registered wrapping public key. A different initiator, partial roster, stale
+frozen registry. Any actual registry change invalidates pending initialization; an exact
+upsert retry does not. Finish requires exactly one valid direct signature for every frozen
+node, including its registered wrapping public key. A different initiator, partial roster, stale
 roster, invalid signature or invalid support-disablement secret rejects. Optional
 SupportDisablement is retained separately and never disables the authority.
 Pending genesis is not visible in map or bootstrap responses.
 
 Sync uses the authority unit's fork choice, offer sampling and intersection.
-Interactive sync additionally requires the supplied Head to equal the resulting
-chosen head; mismatch rejects the candidate. Noninteractive sync validates the
-head encoding but permits a divergent remote head. Disable requires admin, the
+Interactive sync requires the supplied Head to equal the server's **pre-update**
+head; mismatch rejects before staging. Stock `TailnetLockModify` sends its current
+head with newly generated AUMs, then checks that the reply names its last new AUM.
+Noninteractive sync validates the head encoding but permits a divergent remote
+head. Disable requires admin, the
 current head and a valid bounded secret. A disabled authority remains available
 for bootstrap's disablement secret and cannot be reinitialized in this profile.
 
 Each mutating request operates on an inactive candidate slot, including registry,
 signatures, pending state, support/disablement secrets and authority. The complete
-response is encoded and checked against capacity **before** persistence. Only
-then is a complete snapshot streamed to storage, synced, atomically renamed and
+response is encoded and checked against capacity **before** persistence. A
+candidate whose registry snapshot would not fit the map response is rejected with
+413 and never committed, so a successful mutation cannot make the registry
+unreadable. Submitted node-key signatures are stored in canonical typed form:
+ignored CBOR fields are dropped before storage, so they cannot pad the snapshot.
+Only then is a complete snapshot streamed to storage, synced, atomically renamed and
 the directory synced. A successful commit is followed by an infallible live-slot
 switch. Pre-rename errors discard the candidate and return503. Post-rename fsync
 uncertainty exits74 immediately, without rollback or further serving. Exit74 also

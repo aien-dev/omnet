@@ -22,12 +22,58 @@ for j ulong 32
 put ds_rot add p j get b j
 end
 end
+note Exact retries preserve pending initialization and the durable revision.
+fn dsregsame t view ulong 32768 d view uchar 65536 i ulong to int
+if eq i 64
+ret 0
+end
+k = new uchar 32 0
+if eq dsnode t d dsfield t d 1 k 0
+ret 0
+end
+if eq dsnodematch k i 0
+ret 0
+end
+b = new uchar 65536 0
+n = dsbytes t d dsfield t d 13 b
+if ne n 32
+ret 0
+end
+p = mul dsrow i 32
+for j ulong 32
+if ne get ds_rot add p j get b j
+ret 0
+end
+end
+r = dsfield t d 10
+if eq r 0
+ret 1
+end
+n = dsbytes t d r b
+if gt n 65536
+ret 0
+end
+if ne n get ds_slen dsrow i
+ret 0
+end
+p = mul dsrow i 65536
+for j ulong n
+if ne get ds_sig add p j get b j
+ret 0
+end
+end
+ret 1
+end
 fn dsregister t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
 id = dsnumber t d dsfield t d 12
 if or eq id 0 gt id 9223372036854775807
 ret 400
 end
 i = dsfind id
+if ne dsregsame t d i 0
+put ds_ctl 6 dslit out 0 0
+ret 200
+end
 if eq i 64
 if eq dsget 1 64
 ret 409
@@ -70,7 +116,9 @@ if eq dsauthsig b n i tkacget 1 0
 ret 403
 end
 end
-dssetsig i b n tkacget 1
+if ne dssetcanon i b n tkacget 1 0
+ret 400
+end
 end
 dsunpend
 put ds_ctl 6 dslit out 0 0
@@ -118,6 +166,11 @@ p = dslit out p 2
 p = jsonu64 out p dsid i
 p = dslit out p 3
 p = dsputnode out p i
+p = dslit out p 4
+for j ulong 32
+put b j get ds_rot add mul dsrow i 32 j
+end
+p = dsput64 out p b 32
 p = dslit out p 18
 n = dssig i b
 if eq n 0
@@ -129,6 +182,18 @@ p = dslit out p 5
 end
 put ds_ctl 6 dslit out p 7
 ret 200
+end
+note A committed registry must always be servable through the map response.
+fn dsfits to ulong
+keep = get ds_ctl 6
+scr = new uchar 65536 0
+z = dsmap scr
+w = get ds_ctl 6
+put ds_ctl 6 keep
+if or ne z 200 gt w 65536
+ret 0
+end
+ret 1
 end
 fn dsroute t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
 r = get ds_ctl 4
@@ -208,6 +273,9 @@ if and eq z 200 ne get ds_ctl 5 0
 if eq dsget 6 18446744073709551615
 z = 409
 else
+if eq dsfits 0
+z = 413
+else
 dsset 6 add dsget 6 1
 s = dssave
 if eq s 2
@@ -217,6 +285,7 @@ if ne s 0
 z = 503
 else
 put ds_ctl 0 get ds_ctl 1
+end
 end
 end
 end
