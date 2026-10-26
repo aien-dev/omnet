@@ -1,0 +1,250 @@
+note SPDX-License-Identifier: Apache-2.0
+note Test-only line protocol: mode P parse, Q quote, U unsigned, I signed, followed by hex.
+global jib uchar 65536
+global jis ulong 2
+
+fn jtgetc to int
+if eq get jis 0 get jis 1
+n = read 0 jib 0 65536
+if le n 0
+ret -1
+end
+put jis 0 0
+put jis 1 ulong n
+end
+p = get jis 0
+put jis 0 add p 1
+ret int get jib p
+end
+
+fn jtline a edit uchar 65536 to long
+n = ulong 0
+while true bound 65537
+c = jtgetc
+if eq c 10
+ret long n
+end
+if or lt c 0 ge n 65536
+ret -1
+end
+h = jsonhex ulong c
+c = jtgetc
+if lt c 0
+ret -1
+end
+l = jsonhex ulong c
+if or eq h 16 eq l 16
+ret -1
+end
+put a n uchar add mul h 16 l
+n = add n 1
+end
+ret -1
+end
+
+fn jtwrite a view uchar 65536 n ulong to void
+p = ulong 0
+while lt p n bound 65536
+r = write 1 a p sub n p
+if le r 0
+exit 2
+end
+p = add p ulong r
+end
+end
+
+fn jtbyte c uchar to void
+a = new uchar 65536 0
+put a 0 c
+jtwrite a 1
+end
+
+fn jtdec v ulong to void
+a = new uchar 65536 0
+n = jsonu64 a 0 v
+jtwrite a n
+end
+
+fn jthex a view uchar 65536 n ulong to void
+b = new uchar 65536 0
+p = ulong 0
+for i ulong n
+v = ulong get a i
+put b p jsonhc shr v 4
+put b add p 1 jsonhc and v 15
+p = add p 2
+if eq p 65536
+jtwrite b p
+p = 0
+end
+end
+jtwrite b p
+end
+
+fn jthbytes d view uchar 65536 off ulong n ulong h ulong to ulong
+for j ulong n
+h = mul xor h ulong get d add off j 1099511628211
+end
+ret h
+end
+
+fn jthash t view ulong 32768 d view uchar 65536 to ulong
+h = ulong 14695981039346656037
+id = ulong 1
+while le id get t 0 bound 4095
+b = mul id 8
+for j ulong 7
+h = mul xor h get t add b j 1099511628211
+end
+h = jthbytes d get t add b 1 get t add b 2 h
+id = add id 1
+end
+ret h
+end
+
+fn jtparse a view uchar 65536 n ulong to void
+t = new ulong 32768 0
+d = new uchar 65536 0
+o = new uchar 65536 0
+if ne jsonparse a n t d 0
+jtbyte 69
+ret
+end
+jtbyte 79
+jtbyte 32
+jtdec jthash t d
+jtbyte 32
+n = jsonencode t d o
+if eq n jsonbad
+jtbyte 33
+else
+jthex o n
+end
+end
+
+fn jtinteger a view uchar 65536 n ulong mode int to void
+u = new ulong 1 0
+s = new long 1 0
+o = new uchar 65536 0
+if eq mode 85
+if ne jsonuint a 0 n u 0
+jtbyte 69
+ret
+end
+n = jsonu64 o 0 get u 0
+else
+if ne jsonint a 0 n s 0
+jtbyte 69
+ret
+end
+n = jsoni64 o 0 get s 0
+end
+jtbyte 79
+jtbyte 32
+jtwrite o n
+end
+
+fn jtbound to int
+a = new uchar 65536 97
+o = new uchar 65536 0
+t = new ulong 32768 0
+u = new ulong 1 0
+s = new long 1 0
+if ne jsonparse a 65537 t o 2
+ret 1
+end
+if ne jsonbyte o 65536 97 jsonbad
+ret 2
+end
+if ne jsonraw o 65535 a 2 jsonbad
+ret 3
+end
+if ne jsonstr o 0 a 65535 jsonbad
+ret 4
+end
+if ne jsonquote o 0 a 65536 1 jsonbad
+ret 5
+end
+if ne jsonuint a 65536 1 u 1
+ret 6
+end
+if ne jsonint a 65536 1 s 1
+ret 7
+end
+if ne jsonu64 o 65536 0 jsonbad
+ret 8
+end
+if ne jsoni64 o 65535 -1 jsonbad
+ret 9
+end
+if ne jsonraw o 65536 a 0 65536
+ret 10
+end
+if ne jsonstr o 0 a 65534 65536
+ret 11
+end
+put a 0 123
+put a 1 34
+put a 2 120
+put a 3 34
+put a 4 58
+put a 5 49
+put a 6 125
+if ne jsonparse a 7 t o 0
+ret 12
+end
+put a 0 120
+if ne jsonfind t o 1 a 1 3
+ret 13
+end
+if ne jsoncopy t o 3 a 1
+ret 14
+end
+if ne get a 0 49
+ret 15
+end
+if ne jsoncopy t o 0 a jsonbad
+ret 16
+end
+ret 0
+end
+
+fn main to int
+if ne jtbound 0
+ret 3
+end
+a = new uchar 65536 0
+o = new uchar 65536 0
+while true bound 999999
+mode = jtgetc
+if eq mode -1
+ret 0
+end
+n = jtline a
+if lt n 0
+ret 2
+end
+if eq mode 80
+jtparse a ulong n
+else
+if eq mode 81
+p = jsonstr o 0 a ulong n
+if eq p jsonbad
+jtbyte 69
+else
+jtbyte 79
+jtbyte 32
+jthex o p
+end
+else
+if or eq mode 85 eq mode 73
+jtinteger a ulong n mode
+else
+ret 2
+end
+end
+end
+jtbyte 10
+end
+ret 0
+end

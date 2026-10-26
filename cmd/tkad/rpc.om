@@ -1,0 +1,466 @@
+note SPDX-License-Identifier: Apache-2.0
+fn dssecretput b view uchar 65536 n ulong f ulong to void
+dsset f n
+p = mul get ds_ctl 1 1024
+for i ulong n
+if eq f 3
+put ds_sup add p i get b i
+else
+put ds_dis add p i get b i
+end
+end
+end
+fn dsputrot out edit uchar 65536 p ulong i ulong to ulong
+b = new uchar 65536 0
+for j ulong 32
+put b j get ds_rot add mul dsrow i 32 j
+end
+ret dsput64 out p b 32
+end
+fn dsbegin t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+if eq get ds_ctl 3 0
+ret 403
+end
+if ne dsget 0 0
+ret 409
+end
+b = new uchar 65536 0
+n = dsbytes t d dsfield t d 2 b
+if or eq n 0 gt n 65536
+ret 400
+end
+tkareset
+if ne tkaboot b n 0
+ret 400
+end
+dsset 0 1
+dsset 2 get ds_ctl 2
+p = dslit out 0 1
+for i ulong dsget 1
+if ne i 0
+p = dslit out p 6
+end
+p = dslit out p 2
+p = jsonu64 out p dsid i
+p = dslit out p 3
+p = dsputnode out p i
+p = dslit out p 4
+p = dsputrot out p i
+p = dslit out p 5
+end
+p = dslit out p 7
+put ds_ctl 6 p
+put ds_ctl 5 1
+ret 200
+end
+fn dsinitwrap sig view uchar 65536 n ulong i ulong to ulong
+t = new ulong 131074 0
+m = new ulong 132 0
+if ne nksdec sig n t m 0
+ret 0
+end
+if or ne get m 0 1 ne nkslen t get m 5 32
+ret 0
+end
+for j ulong 32
+if ne nksbyte sig t get m 5 j get ds_rot add mul dsrow i 32 j
+ret 0
+end
+end
+ret 1
+end
+fn dsmapid d view uchar 65536 p ulong n ulong out edit ulong 1 to int
+if eq n 0
+ret 1
+end
+negative = ulong 0
+if or eq get d p 43 eq get d p 45
+if eq get d p 45
+negative = 1
+end
+p = add p 1
+n = sub n 1
+end
+if eq n 0
+ret 1
+end
+v = ulong 0
+limit = add ulong 9223372036854775807 negative
+for i ulong n
+c = get d add p i
+if or lt c 48 gt c 57
+ret 1
+end
+digit = ulong sub c 48
+if gt v div sub limit digit 10
+ret 1
+end
+v = add mul v 10 digit
+end
+if ne negative 0
+v = neg v
+end
+put out 0 v
+ret 0
+end
+fn dsfinishone t view ulong 32768 d view uchar 65536 j ulong seen edit uchar 64 to int
+id = new ulong 1 0
+if ne dsmapid d get t add mul j 8 1 get t add mul j 8 2 id 0
+ret 400
+end
+i = dsfind get id 0
+if eq i 64
+ret 409
+end
+if ne get seen i 0
+ret 400
+end
+put seen i 1
+b = new uchar 65536 0
+n = dsbytes t d add j 1 b
+if or eq n 0 gt n 65536
+ret 400
+end
+if eq dsauthsig b n i 0 0
+ret 400
+end
+if eq dsinitwrap b n i 0
+ret 400
+end
+dssetsig i b n 0
+ret 200
+end
+fn dsfinish t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+if eq get ds_ctl 3 0
+ret 403
+end
+if or ne dsget 0 1 ne dsget 2 get ds_ctl 2
+ret 409
+end
+r = dsfield t d 3
+if ne dskind t r 1
+ret 400
+end
+if ne get t add mul r 8 5 mul dsget 1 2
+ret 409
+end
+seen = new uchar 64 0
+j = add r 1
+while lt j get t add mul r 8 3 bound 4095
+z = dsfinishone t d j seen
+if ne z 200
+ret z
+end
+j = get t add mul add j 1 8 3
+end
+b = new uchar 65536 0
+n = dsbytes t d dsfield t d 4 b
+if gt n 1024
+ret 400
+end
+if ne n 0
+if eq dsvalidsecret b n 0
+ret 400
+end
+end
+dssecretput b n 3
+dsset 0 2
+dsset 2 0
+put ds_ctl 6 dslit out 0 0
+put ds_ctl 5 1
+ret 200
+end
+fn dsputsecret out edit uchar 65536 p ulong to ulong
+b = new uchar 65536 0
+q = mul get ds_ctl 1 1024
+for i ulong dsget 4
+put b i get ds_dis add q i
+end
+ret dsput64 out p b dsget 4
+end
+fn dsbootstrap t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+b = new uchar 65536 0
+c = new uchar 65536 0
+p = ulong 0
+r = dsfield t d 5
+if and ne r 0 and ne dskind t r 3 ne dskind t r 7
+ret 400
+end
+if lt dsget 0 2
+ret 409
+end
+if eq dsget 0 3
+if eq dsget 4 0
+put ds_ctl 6 dslit out 0 0
+ret 200
+end
+p = dslit out 0 9
+p = dsputsecret out p
+else
+n = tkaget 0 0 b
+n = tkamodel b n 1 c 0
+if gt n 65536
+ret 500
+end
+p = dslit out 0 8
+p = dsput64 out p c n
+end
+put ds_ctl 6 dslit out p 5
+ret 200
+end
+fn dsofferparse t view ulong 32768 d view uchar 65536 offer edit uchar 65536 to ulong
+h = new uchar 32 0
+if eq dshash t d dsfield t d 5 h 0
+ret 65537
+end
+for i ulong 32
+put offer i get h i
+end
+r = dsfield t d 6
+if or eq r 0 eq dskind t r 7
+ret 1
+end
+if ne dskind t r 2
+ret 65537
+end
+cnt = ulong 1
+j = add r 1
+while lt j get t add mul r 8 3 bound 4095
+if ge cnt 2048
+ret 65537
+end
+if eq dshash t d j h 0
+ret 65537
+end
+for i ulong 32
+put offer add mul cnt 32 i get h i
+end
+cnt = add cnt 1
+j = get t add mul j 8 3
+end
+ret cnt
+end
+fn dsputhash out edit uchar 65536 p ulong a view uchar 65536 off ulong to ulong
+h = new uchar 32 0
+b = new uchar 65536 0
+for j ulong 32
+put h j get a add off j
+end
+n = cdaumenc h b
+ret jsonstr out p b n
+end
+fn dsputaum out edit uchar 65536 p ulong idx ulong to ulong
+b = new uchar 65536 0
+c = new uchar 65536 0
+n = tkaget idx 0 b
+n = tkamodel b n 1 c 0
+if gt n 65536
+ret 65537
+end
+ret dsput64 out p c n
+end
+fn dsoffer t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+if ne dsget 0 2
+ret 409
+end
+a = new uchar 65536 0
+nodes = new ulong 128 0
+n = dsofferparse t d a
+if gt n 2048
+ret 400
+end
+cnt = tkamissing a n nodes
+if gt cnt 128
+ret 409
+end
+n = tkaoffer a
+p = dslit out 0 10
+p = dsputhead out p
+p = dslit out p 11
+for i ulong sub n 1
+if ne i 0
+p = dslit out p 6
+end
+p = dsputhash out p a mul add i 1 32
+end
+p = dslit out p 12
+for i ulong cnt
+if ne i 0
+p = dslit out p 6
+end
+p = dsputaum out p get nodes i
+end
+put ds_ctl 6 dslit out p 7
+ret 200
+end
+fn dssend t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+if ne dsget 0 2
+ret 409
+end
+h = new uchar 32 0
+if eq dshash t d dsfield t d 5 h 0
+ret 400
+end
+r = dsfield t d 8
+if and ne r 0 and ne dskind t r 5 and ne dskind t r 6 ne dskind t r 7
+ret 400
+end
+r = dsfield t d 7
+if and ne r 0 and ne dskind t r 2 ne dskind t r 7
+ret 400
+end
+if ne tkabegin 0
+ret 500
+end
+b = new uchar 65536 0
+if eq dskind t r 2
+j = add r 1
+while lt j get t add mul r 8 3 bound 4095
+n = dsbytes t d j b
+if or eq n 0 gt n 65536
+tkaabort
+ret 400
+end
+if ne tkastage b n 0
+ret 400
+end
+j = get t add mul j 8 3
+end
+end
+if ne tkacommit 0
+ret 400
+end
+if eq dskind t dsfield t d 8 5
+if eq dsheadmatch t d 0
+ret 409
+end
+end
+p = dslit out 0 10
+p = dsputhead out p
+put ds_ctl 6 dslit out p 5
+put ds_ctl 5 1
+ret 200
+end
+fn dsdisable t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+if eq get ds_ctl 3 0
+ret 403
+end
+if ne dsget 0 2
+ret 409
+end
+if eq dsheadmatch t d 0
+ret 409
+end
+b = new uchar 65536 0
+n = dsbytes t d dsfield t d 9 b
+if gt n 1024
+ret 400
+end
+if eq dsvalidsecret b n 0
+ret 403
+end
+dssecretput b n 4
+dsset 0 3
+put ds_ctl 6 dslit out 0 0
+put ds_ctl 5 1
+ret 200
+end
+fn dsnodematch key view uchar 32 i ulong to ulong
+p = mul dsrow i 32
+for j ulong 32
+if ne get key j get ds_key add p j
+ret 0
+end
+end
+ret 1
+end
+fn dstarget sig view uchar 65536 n ulong to ulong
+t = new ulong 131074 0
+m = new ulong 132 0
+key = new uchar 32 0
+if ne nksdec sig n t m 0
+ret 64
+end
+r = get m 1
+if eq nksnode sig t r 0
+ret 64
+end
+for j ulong 32
+put key j nksbyte sig t r add j 2
+end
+for i ulong dsget 1
+if ne dsnodematch key i 0
+ret i
+end
+end
+ret 64
+end
+fn dssign t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+if ne dsget 0 2
+ret 409
+end
+b = new uchar 65536 0
+n = dsbytes t d dsfield t d 10 b
+if or eq n 0 gt n 65536
+ret 400
+end
+i = dstarget b n
+if eq i 64
+ret 404
+end
+if eq dsauthsig b n i tkacget 1 0
+ret 403
+end
+dssetsig i b n tkacget 1
+put ds_ctl 6 dslit out 0 0
+put ds_ctl 5 1
+ret 200
+end
+fn dsuses sig view uchar 65536 n ulong key view uchar 65536 to ulong
+t = new ulong 131074 0
+m = new ulong 132 0
+if ne nksdec sig n t m 0
+ret 0
+end
+for i ulong get m 128
+r = get m add mul i 8 2
+if eq nkslen t r 32
+same = ulong 1
+for j ulong 32
+if ne nksbyte sig t r j get key j
+same = 0
+end
+end
+if eq same 1
+ret 1
+end
+end
+end
+ret 0
+end
+fn dsaffected t view ulong 32768 d view uchar 65536 out edit uchar 65536 to int
+if ne dsget 0 2
+ret 409
+end
+key = new uchar 65536 0
+b = new uchar 65536 0
+if ne dsbytes t d dsfield t d 11 key 32
+ret 400
+end
+p = dslit out 0 13
+cnt = ulong 0
+for i ulong dsget 1
+n = dssig i b
+if ne n 0
+if ne dsuses b n key 0
+if ne cnt 0
+p = dslit out p 6
+end
+p = dsput64 out p b n
+cnt = add cnt 1
+end
+end
+end
+put ds_ctl 6 dslit out p 7
+ret 200
+end

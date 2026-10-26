@@ -1,0 +1,91 @@
+note SPDX-License-Identifier: Apache-2.0
+note Test-only controlled self-exec driver; production daemon owns its resume grammar.
+fn rsresult value uchar to int
+b = new uchar 65536 0
+put b 0 value
+r = write int 1 b ulong 0 ulong 1
+ret 0
+end
+fn rsdrain to int
+b = new uchar 65536 0
+for i ulong 65537
+r = stread b
+if lt r long 0
+ret 1
+end
+if eq r long 0
+ret 0
+end
+end
+ret 1
+end
+fn main to int
+p = new uchar 65536 0
+n = argread ulong 1 p ulong 0 ulong 65536
+if eq get p 0 uchar 45
+if ne stresume 64 65 0
+ret rsresult 1
+end
+if ne rsdrain 0
+ret rsresult 1
+end
+r = rsresult 9
+v = read int 0 p ulong 0 ulong 1
+r = stclose
+ret rsresult uchar r
+end
+if ne stopen p ulong n 0 0
+ret rsresult 1
+end
+note No handoff while a recovery read is in progress.
+if ne stpass 64 65 1
+ret rsresult 4
+end
+if ne rsdrain 0
+ret rsresult 1
+end
+if ne stpass 64 64 1
+ret rsresult 4
+end
+if ne stpass 1 65 1
+ret rsresult 4
+end
+if ne stpass 64 65 0
+ret rsresult 1
+end
+if ne stbegin 1
+ret rsresult 4
+end
+note Packed argv: two records /proc/self/exe and --resume.
+for i ulong 32
+put p i 0
+end
+put p 0 2
+put p 2 14
+put p 4 47
+put p 5 112
+put p 6 114
+put p 7 111
+put p 8 99
+put p 9 47
+put p 10 115
+put p 11 101
+put p 12 108
+put p 13 102
+put p 14 47
+put p 15 101
+put p 16 120
+put p 17 101
+put p 18 8
+put p 20 45
+put p 21 45
+put p 22 114
+put p 23 101
+put p 24 115
+put p 25 117
+put p 26 109
+put p 27 101
+r = rsresult 8
+v = execprog p ulong 0 ulong 28
+ret rsresult 5
+end

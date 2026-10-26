@@ -1,0 +1,280 @@
+note SPDX-License-Identifier: Apache-2.0
+text ds_names "Version|NodeKey|GenesisAUM|Signatures|SupportDisablement|Head|Ancestors|MissingAUMs|Interactive|DisablementSecret|Signature|KeyID|NodeID|RotationPubkey|Remove|"
+text ds_text "{}|{\"NeedSignatures\":[|{\"NodeID\":|,\"NodePublic\":|,\"RotationPubkey\":|}|,|]}|{\"GenesisAUM\":|{\"DisablementSecret\":|{\"Head\":|,\"Ancestors\":[|],\"MissingAUMs\":[|{\"Signatures\":[|{\"TKAInfo\":|null|{\"Disabled\":true}|,\"Nodes\":[|,\"KeySignature\":|,\"Revision\":|{\"Error\":\"request rejected\"}|"
+fn dslower c uchar to uchar
+if and ge c 65 le c 90
+ret add c 32
+end
+ret c
+end
+fn dsfold d view uchar 65536 p ulong n ulong to ulong
+if eq n 0
+ret 0
+end
+c = get d p
+if and eq c 197 ge n 2
+if eq get d add p 1 191
+ret 627
+end
+end
+if and eq c 226 ge n 3
+if and eq get d add p 1 132 eq get d add p 2 170
+ret 875
+end
+end
+ret add ulong dslower c 256
+end
+fn dsnamematch d view uchar 65536 p ulong start ulong n ulong count ulong to ulong
+for i ulong n
+v = dsfold d p count
+if ne and v 255 ulong dslower get ds_names add start i
+ret 0
+end
+v = shr v 8
+if gt v count
+ret 0
+end
+p = add p v
+count = sub count v
+end
+if ne count 0
+ret 0
+end
+ret 1
+end
+fn dsfieldmatch t view ulong 32768 d view uchar 65536 j ulong start ulong n ulong to ulong
+p = get t add mul j 8 1
+count = get t add mul j 8 2
+ret dsnamematch d p start n count
+end
+fn dsfield t view ulong 32768 d view uchar 65536 f ulong to ulong
+start = ulong 0
+for i ulong f
+while ne get ds_names start 124 bound 128
+start = add start 1
+end
+start = add start 1
+end
+n = ulong 0
+while ne get ds_names add start n 124 bound 128
+n = add n 1
+end
+found = ulong 0
+j = ulong 2
+while lt j get t 11 bound 4095
+if ne dsfieldmatch t d j start n 0
+if ne found 0
+ret 65537
+end
+found = add j 1
+end
+j = get t add mul add j 1 8 3
+end
+ret found
+end
+fn dslit out edit uchar 65536 p ulong f ulong to ulong
+start = ulong 0
+for i ulong f
+while ne get ds_text start 124 bound 256
+start = add start 1
+end
+start = add start 1
+end
+n = ulong 0
+while ne get ds_text add start n 124 bound 256
+n = add n 1
+end
+if gt p sub ulong 65536 n
+ret 65537
+end
+for i ulong n
+put out add p i get ds_text add start i
+end
+ret add p n
+end
+fn dskind t view ulong 32768 id ulong to ulong
+if or eq id 0 ge id 4096
+ret 0
+end
+ret get t mul id 8
+end
+fn dsbytes t view ulong 32768 d view uchar 65536 id ulong out edit uchar 65536 to ulong
+b = new uchar 65536 0
+if or eq id 0 eq dskind t id 7
+ret 0
+end
+if eq dskind t id 3
+n = jsoncopy t d id b
+if gt n 65536
+ret 65537
+end
+ret cdb64dec b n out
+end
+if eq dskind t id 2
+j = add id 1
+n = ulong 0
+while lt j get t add mul id 8 3 bound 4095
+if eq dskind t j 7
+put out n 0
+else
+v = dsnumber t d j
+if gt v 255
+ret 65537
+end
+put out n uchar v
+end
+n = add n 1
+j = add j 1
+end
+ret n
+end
+ret 65537
+end
+fn dsnumber t view ulong 32768 d view uchar 65536 id ulong to ulong
+v = new ulong 1 0
+if ne dskind t id 4
+ret 18446744073709551615
+end
+if ne jsonuint d get t add mul id 8 1 get t add mul id 8 2 v 0
+ret 18446744073709551615
+end
+ret get v 0
+end
+fn dsnode t view ulong 32768 d view uchar 65536 id ulong k edit uchar 32 to ulong
+b = new uchar 65536 0
+if ne dskind t id 3
+ret 0
+end
+n = jsoncopy t d id b
+ret cdnkdec b n k
+end
+fn dshash t view ulong 32768 d view uchar 65536 id ulong k edit uchar 32 to ulong
+b = new uchar 65536 0
+if ne dskind t id 3
+ret 0
+end
+n = jsoncopy t d id b
+ret cdaumdec b n k
+end
+fn dsheadmatch t view ulong 32768 d view uchar 65536 to ulong
+a = new uchar 32 0
+b = new uchar 32 0
+if eq dshash t d dsfield t d 5 a 0
+ret 0
+end
+z = tkahead b
+for i ulong 32
+if ne get a i get b i
+ret 0
+end
+end
+ret 1
+end
+fn dsput64 out edit uchar 65536 p ulong src view uchar 65536 n ulong to ulong
+b = new uchar 65536 0
+if gt n 49152
+ret 65537
+end
+z = cdb64enc src n b
+ret jsonstr out p b z
+end
+fn dsputnode out edit uchar 65536 p ulong i ulong to ulong
+k = new uchar 32 0
+b = new uchar 65536 0
+dskey i k 0
+n = cdnkenc k b
+ret jsonstr out p b n
+end
+fn dsputhead out edit uchar 65536 p ulong to ulong
+k = new uchar 32 0
+b = new uchar 65536 0
+z = tkahead k
+if ne z 0
+ret 65537
+end
+n = cdaumenc k b
+ret jsonstr out p b n
+end
+fn dscommon t view ulong 32768 d view uchar 65536 to int
+if ne dskind t 1 1
+ret 400
+end
+for i ulong 15
+if eq dsfield t d i 65537
+ret 400
+end
+end
+if ge get ds_ctl 4 9
+if eq get ds_ctl 3 0
+ret 403
+end
+ret 200
+end
+v = new long 1 0
+id = dsfield t d 0
+if ne id 0
+if ne dskind t id 4
+ret 400
+end
+if ne jsonint d get t add mul id 8 1 get t add mul id 8 2 v 0
+ret 400
+end
+end
+id = dsfind get ds_ctl 2
+if eq id 64
+ret 403
+end
+k = new uchar 32 0
+if eq dsnode t d dsfield t d 1 k 0
+ret 400
+end
+for i ulong 32
+if ne get k i get ds_key add mul dsrow id 32 i
+ret 403
+end
+end
+ret 200
+end
+fn dseqhash s view uchar 65536 p ulong h view uchar 32 to ulong
+for k ulong 32
+if ne get h k get s add p k
+ret 0
+end
+end
+ret 1
+end
+fn dssecretmatch s view uchar 65536 sn ulong h view uchar 32 to ulong
+t = new ulong 131074 0
+z = cbrdec s sn t
+r = cbrmfind t 0 2
+j = add r 1
+for i ulong cbrval t r
+if eq cbrval t j 32
+if ne dseqhash s cbrpoff t j h 0
+ret 1
+end
+end
+j = cbrnext t j
+end
+ret 0
+end
+fn dsvalidsecretat b view uchar 65536 n ulong idx ulong to ulong
+if gt n 1024
+ret 0
+end
+h = new uchar 32 0
+s = new uchar 65536 0
+sec = new uchar 1024 0
+for i ulong n
+put sec i get b i
+end
+a2tka sec n h
+sn = tkaget idx 1 s
+if gt sn 65536
+ret 0
+end
+ret dssecretmatch s sn h
+end
+fn dsvalidsecret b view uchar 65536 n ulong to ulong
+ret dsvalidsecretat b n tkacget 1
+end

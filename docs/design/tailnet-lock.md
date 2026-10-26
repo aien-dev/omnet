@@ -1,6 +1,6 @@
 # Tailnet Lock for self-hosted control servers
 
-Status: crypto, typed models, node signatures and bounded in-memory authority implemented. See [Plan and status](#plan-and-status).
+Status: bounded local Omega daemon, durable snapshots, JSON RPCs and TKA authority implemented. Headscale integration remains pending. See [Plan and status](#plan-and-status).
 
 ## Problem
 
@@ -102,10 +102,20 @@ flowchart LR
 
 It listens on a local socket, using the Omega native host operations from omega-mv `seed/host/`.
 
-**Storage**: an append-only directory of AUM files named by hash, plus one state file that is
-replaced by write, fsync and rename. Every file is opened through descriptors, never re-checked by path
-(design rule 2). A request that would change the head is applied to a copy and becomes visible only
-after it is durable.
+**Storage design for stage four**: a single versioned whole-service snapshot, including authority
+updates in reconstruction-preserving typed form, node records/signatures, pending initialization,
+and disablement state. A candidate is built in the inactive authority slot. Write a temporary file,
+fsync it, rename it over the committed snapshot, then fsync the directory before publishing the
+candidate or acknowledging success. Failure after rename but before directory fsync is an uncertain
+commit: stop serving, do not attempt a rollback rename. Recovery validates the entire committed
+snapshot; a missing or corrupt snapshot is not interpreted as disabled TKA.
+
+The state directory is provisioned under trusted ancestors, owned by the effective UID, and mode
+0700. Open and validate its descriptor, then use fixed relative names after `fchdir`; reject
+unexpected file types, permissions, ownership and hard links. A separate bind-only abstract Unix
+socket keyed by directory device/inode provides writer exclusion in one Linux network namespace.
+Only its holder may remove a stale RPC socket. All writers must use the same network namespace;
+same-UID processes and root remain trusted. This is not cross-namespace locking.
 
 **headscale glue** (Go, in a headscale fork) holds no protocol logic. It:
 1. Registers the eight `/machine/tka/*` routes on the Noise router. Each passes the authenticated
@@ -119,9 +129,11 @@ after it is durable.
 Its only decision is which nodes may call admin RPCs: `init/*` and `disable` are restricted to the
 tailnet owner. It makes that decision from headscale's own user model.
 
-**Privilege**: tkad runs as its own unprivileged user. It owns only its state directory and the socket
-that headscale connects to (design rule 4). A crash in tkad, which is what an Omega trap is, refuses
-TKA requests. It never makes headscale skip verification: the glue fails closed.
+**Local trust boundary for stage four**: the RPC socket lives inside the private state directory.
+Same-UID local adapters may supply authenticated node identity and administrator assertions;
+the daemon does not authenticate remote Tailscale clients itself. Before separate-UID Headscale
+integration, move the RPC socket into a distinct access-controlled directory without granting the
+adapter access to the state files. Production integration must fail closed on daemon errors.
 
 **Current unit limits**: model and crypto inputs are capped at 64 KiB. The in-memory authority holds
 128 AUMs per slot and two slots; capacity exhaustion returns an error without evicting history.
@@ -148,9 +160,10 @@ that way. That is a client issue outside this project; tkad's error bodies are s
 | CTAP2 CBOR encode and decode, bounded (`om/cbor`) | Omega | done: RFC 8949 App. A, 1,200 `tka` structures byte-identical with matching `AUM.Hash`, 475 hostile cases |
 | AUM / State / Key model, validation and authorized transitions (`om/tka`) | Omega | implemented: typed reconstruction and differential oracle |
 | NodeKeySignature model and verification (`om/tkasig`) | Omega | implemented: direct, credential and rotation, strict/ZIP-215 rules |
-| Bounded in-memory chain (`om/tka`): fork choice, state at hash, sync, atomic Inform | Omega | implemented: two slots, 128 AUMs each; no durable storage |
-| JSON for the eight RPC types | Omega | planned |
-| tkad service: socket loop, storage | Omega | planned |
+| Bounded in-memory chain (`om/tka`): fork choice, state at hash, sync, atomic Inform | Omega | implemented: two slots, 128 AUMs each; daemon adds persistence |
+| JSON (`om/json`) and eight RPC handlers (`cmd/tkad`) | Omega | implemented: bounded parsing, trusted adapter identity binding |
+| Snapshot storage (`om/store`) | Omega | implemented: descriptor validation, writer exclusion, atomic publication, recovery |
+| tkad service (`cmd/tkad`) | Omega | implemented: private Unix socket, registry/map commands, controlled self-exec |
 | headscale glue | Go (fork) | planned |
 
 ## Verification plan
@@ -187,13 +200,33 @@ Go 1.26.8 supplied the pinned TKA oracle; the existing optional oracle compariso
 These are bounded in-memory host results, not stock-client end-to-end, durable-storage,
 constant-time, or production-network qualification.
 
+### Stage-four verification
+
+The complete `tools/test.sh` run passed all twelve library/daemon suites on ARM64 Linux.
+The compiler pin was unchanged. New results:
+
+- JSON: 7,706 differential cases and 22 golden vectors; six completed-result mutants detected.
+- Store: 116 completed native cases, independent BLAKE2s framing referee and checksum mutant.
+  Foreign-UID ownership fixtures were skipped because the runner was not root.
+- Daemon: 224 real-socket assertions across all eight RPCs and registry/map commands.
+  Additional scenarios exercised two-iteration self-exec with queued clients and continuous
+  writer exclusion, missing/swapped resume descriptors, pre-rename ENOSPC followed by successful
+  mutation without restart, and post-rename fsync failure with no reply and recovery of the
+  renamed candidate. Checksum-valid but semantically corrupt snapshots were rejected.
+- Separate launch smoke observed an initialized map response, a 403 for a missing admin assertion,
+  and identical state after process termination/restart.
+
+These checks do not establish filesystem power-loss durability, cross-namespace writer exclusion,
+stock-client compatibility beyond the tested profile, or production deployment security.
+
 ## Plan and status
 
 1. Crypto primitives: BLAKE2s, SHA-512, Ed25519. **Done.**
 2. BLAKE2b, Argon2i, codecs, CBOR. **Done.**
 3. TKA model and bounded in-memory chain logic, differential against `tka`. **Implemented.**
    Cross-unit smoke checks node authorization before and after a signed authority-key removal.
-4. tkad service, storage, JSON.
+4. tkad service, storage, JSON. **Implemented for the bounded same-UID local-adapter profile.**
+   See [`cmd/tkad/README.md`](../../cmd/tkad/README.md) for invocation, framing, limits and tests.
 5. headscale glue and end-to-end tests with stock clients.
 6. Review by a second implementer before any production use. Until then this is pre-alpha and does
    not protect a tailnet.

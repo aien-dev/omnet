@@ -1,0 +1,151 @@
+note SPDX-License-Identifier: Apache-2.0
+text ds_init "--init"
+text ds_resum "--resume"
+text ds_exe "/proc/self/exe"
+fn dslistenercheck fd int to int
+b = new uchar 65536 0
+if ne sockname fd b 0 128 add long len ds_sock 3
+ret 1
+end
+if or ne get b 0 1 ne get b 1 0
+ret 1
+end
+for i ulong len ds_sock
+if ne get b add i 2 get ds_sock i
+ret 1
+end
+end
+if ne get b add len ds_sock 2 0
+ret 1
+end
+if ne fstat fd b 0 128 0
+ret 1
+end
+if ne and dsleget b 16 61440 49152
+ret 1
+end
+if ne lstat ds_sock 0 len ds_sock b 0 128 0
+ret 1
+end
+if ne and dsleget b 16 4294967295 49536
+ret 1
+end
+if ne and dsleget b 24 4294967295 ulong geteuid
+ret 1
+end
+if ne listen fd int 32 0
+ret 1
+end
+ret 0
+end
+fn dsroll fd int to void
+b = new uchar 65536 0
+if ne fd 66
+if ne fstat int 66 b 0 128 -9
+exit 76
+end
+if ne dupfd fd int 66 int 0 66
+exit 76
+end
+if ne stpass int 64 int 65 0
+exit 76
+end
+end
+put b 0 2
+put b 1 0
+put b 2 uchar len ds_exe
+put b 3 0
+for i ulong len ds_exe
+put b add i 4 get ds_exe i
+end
+p = add len ds_exe 4
+put b p uchar len ds_resum
+put b add p 1 0
+for i ulong len ds_resum
+put b add add p 2 i get ds_resum i
+end
+z = execprog b 0 add add p 2 len ds_resum
+exit 76
+end
+fn dsstartup to int
+b = new uchar 65536 0
+a = new uchar 65536 0
+args = argcnt
+if and ne args 2 ne args 3
+ret -1
+end
+n = argread 1 b 0 65536
+if or le n 0 gt n 4095
+ret -1
+end
+resume = ulong 0
+if eq n long len ds_resum
+resume = 1
+for i ulong len ds_resum
+if ne get b i get ds_resum i
+resume = 0
+end
+end
+end
+if ne resume 0
+if ne args 2
+ret -1
+end
+if ne stresume int 64 int 65 0
+ret -1
+end
+if ne dslistenercheck int 66 0
+ret -1
+end
+if ne dsload 0
+ret -1
+end
+ret 66
+end
+for i ulong ulong n
+if eq get b i 0
+ret -1
+end
+end
+init = int 0
+if eq args 3
+m = argread 2 a 0 65536
+if ne m long len ds_init
+ret -1
+end
+for i ulong len ds_init
+if ne get a i get ds_init i
+ret -1
+end
+end
+init = 1
+end
+if ne stopen b ulong n init 0
+ret -1
+end
+if ne init 0
+dsselect 0
+s = dssave
+if eq s 2
+exit 74
+end
+if ne s 0
+ret -1
+end
+else
+if ne dsload 0
+ret -1
+end
+end
+ret dslisten
+end
+fn main to int
+z = umask int 127
+fd = dsstartup
+if lt fd 0
+ret 73
+end
+dsbatch fd
+dsroll fd
+ret 76
+end
