@@ -1,6 +1,7 @@
 # SC1-Q durable framing charges
 
-Base: `security/3-consumer-enforcement` at `b571465`, which supplies `om/quantity`.
+Base: current `main`. This rebuild carries `om/quantity` itself (imported from Omega #771),
+so nothing here depends on the old `security/3-consumer-enforcement` stack.
 This slice is the WORM-owned durable-state side of the SC1-Q row and touches no
 transport, revision or comparison function owned elsewhere.
 
