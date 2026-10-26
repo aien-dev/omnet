@@ -179,6 +179,9 @@ Test-only syscall-boundary variants prove one-shot begin/commit failure recovery
 without process restart and fatal handling of post-rename directory-fsync failure.
 A two-dispatch epoch variant checks queued connections, stable PID/listener,
 retained writer exclusion and missing/swapped resume-descriptor refusal.
+A directory-replacement fixture proves the held descriptor, not the path, is the
+store: after init, replacing the directory at the same path does not redirect
+commits, and the replacement stays empty and refuses resume.
 A completed-response admin-bypass mutant must be detected; a trapping mutant
 must be rejected as an invalid test completion. Tests use isolated temporary
 state directories and no live services. These are host/socket regression tests,
