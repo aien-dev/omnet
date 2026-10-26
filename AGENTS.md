@@ -2,6 +2,8 @@
 
 Read `README.md` (mission, bug classes, design rules) and `docs/design/` before any edit.
 
+Shared rules: read https://www.aienos.com/agents/RULES.md first. This file adds what is specific to this repository; where the two differ, this file wins here.
+
 Rules:
 
 - **Omega only for shipped logic.** Anything that cannot be adapted from an existing component is
