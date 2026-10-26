@@ -650,7 +650,7 @@ p = jsonuesc o p v
 end
 else
 if and eq v 65533 eq get r 1 1
-p = jsonrune o p v
+p = jsonuesc o p v
 else
 p = jsonrune o p v
 end
