@@ -82,7 +82,7 @@ tools/test.sh      # builds the pinned compiler on first use, then runs every un
 
 ## Status
 
-Pre-alpha. The Omega daemon implements all eight TKA RPCs, node registry/map operations, durable
+The Omega daemon implements all eight TKA RPCs, node registry/map operations, durable
 snapshots, and validated restart recovery over a private Unix socket. Its local adapter is trusted
 and must run as the same UID; the daemon does not authenticate remote Tailscale clients.
 
