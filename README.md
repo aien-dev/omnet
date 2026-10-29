@@ -32,8 +32,8 @@ commit in [`omega.pin`](omega.pin).
 
 An unsized `view T *` / `edit T *` parameter is a pointer plus a count. Every index into it is checked
 at run time and the count travels with it, so the bounds rule above holds for slices as well
-([OM-2 guarantee matrix](docs/one_layer/OM2-TUTORIAL.md) lives in the Omega repository, at the pinned
-commit).
+([OM-2 guarantee matrix](https://github.com/aien-dev/omega-mv/blob/2d6ea129b5fc12c29472e79b20c3e225a1cedef4/docs/one_layer/OM2-TUTORIAL.md)
+lives in the Omega repository; it was added after the omega-mv commit pinned in `omega.pin`).
 A trap stops the program. That turns memory corruption into a crash, so a reachable trap is still a
 denial-of-service bug.
 
